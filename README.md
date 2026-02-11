@@ -1,70 +1,118 @@
-# Getting Started with Create React App
+# StoreIt — Student Detail Management System
 
-This project was bootstrapped with [Create React App](https://github.com/facebook/create-react-app).
+A frontend-only web app built with **Create React App** + **Supabase** (Auth, Database, RLS). No backend server needed.
 
-## Available Scripts
+## Roles
 
-In the project directory, you can run:
+| Role | Capabilities |
+|------|-------------|
+| **Org Admin** | Create departments, create Super Admin accounts |
+| **Super Admin** | Create classes, faculty, students; assign faculty to classes; add students to classes |
+| **Faculty** | Build dynamic student detail forms per class; create faculty-only fields; view student submissions |
+| **Student** | View assigned class form fields; fill in and submit/update their details |
 
-### `npm start`
+## Tech Stack
 
-Runs the app in the development mode.\
-Open [http://localhost:3000](http://localhost:3000) to view it in your browser.
+- React 19 (Create React App)
+- Supabase JS Client (Auth + Database)
+- React Router v6
+- Plain CSS (responsive, mobile-first)
 
-The page will reload when you make changes.\
-You may also see any lint errors in the console.
+## Setup
 
-### `npm test`
+### 1. Supabase Project
 
-Launches the test runner in the interactive watch mode.\
-See the section about [running tests](https://facebook.github.io/create-react-app/docs/running-tests) for more information.
+1. Go to [supabase.com](https://supabase.com) and create a new project.
+2. In the SQL Editor, run the contents of **`supabase/schema.sql`** to create all tables, functions, and RLS policies.
+3. Copy your **Project URL** and **anon/public key** from Settings → API.
 
-### `npm run build`
+### 2. Environment Variables
 
-Builds the app for production to the `build` folder.\
-It correctly bundles React in production mode and optimizes the build for the best performance.
+Edit `.env.local` in the project root:
 
-The build is minified and the filenames include the hashes.\
-Your app is ready to be deployed!
+```env
+REACT_APP_SUPABASE_URL=https://your-project.supabase.co
+REACT_APP_SUPABASE_ANON_KEY=your-anon-key-here
+```
 
-See the section about [deployment](https://facebook.github.io/create-react-app/docs/deployment) for more information.
+### 3. Install & Run
 
-### `npm run eject`
+```bash
+npm install
+npm start
+```
 
-**Note: this is a one-way operation. Once you `eject`, you can't go back!**
+The app runs at `http://localhost:3000`.
 
-If you aren't satisfied with the build tool and configuration choices, you can `eject` at any time. This command will remove the single build dependency from your project.
+### 4. Create the First Org Admin
 
-Instead, it will copy all the configuration files and the transitive dependencies (webpack, Babel, ESLint, etc) right into your project so you have full control over them. All of the commands except `eject` will still work, but they will point to the copied scripts so you can tweak them. At this point you're on your own.
+1. In Supabase Dashboard → Authentication → Users → **Add User**.
+   - Email: `orgadmin@storeit.com`
+   - Password: `OrgAdmin123!`
+2. In SQL Editor, update the profile:
+   ```sql
+   UPDATE public.profiles
+   SET role = 'org_admin', full_name = 'Org Administrator'
+   WHERE email = 'orgadmin@storeit.com';
+   ```
+3. Log in at `http://localhost:3000/login` with those credentials.
 
-You don't have to ever use `eject`. The curated feature set is suitable for small and middle deployments, and you shouldn't feel obligated to use this feature. However we understand that this tool wouldn't be useful if you couldn't customize it when you are ready for it.
+### 5. Seed Data Walkthrough
 
-## Learn More
+1. **Org Admin**: Create a department (e.g., "Computer Science"), then create a Super Admin for it.
+2. **Super Admin**: Create classes, faculty, and students. Assign faculty to classes and add students.
+3. **Faculty**: Select a class → create form fields (Name, Roll No, Phone, etc.). Optionally create faculty-only fields.
+4. **Student**: Login → see assigned class → fill in the dynamic form → save.
 
-You can learn more in the [Create React App documentation](https://facebook.github.io/create-react-app/docs/getting-started).
+See `supabase/seed.sql` for more details.
 
-To learn React, check out the [React documentation](https://reactjs.org/).
+## Project Structure
 
-### Code Splitting
+```
+src/
+  supabaseClient.js          # Supabase client init
+  context/AuthContext.js      # Auth provider + session listener
+  routes/ProtectedRoute.js    # Role-based route guard
+  pages/
+    LoginPage.js              # Login form
+    OrgAdminDashboard.js      # Dept + Super Admin management
+    SuperAdminDashboard.js    # Class, Faculty, Student management
+    FacultyDashboard.js       # Form builder + view students
+    StudentDashboard.js       # Dynamic form fill
+  components/
+    Navbar.js                 # Top nav with role + logout
+    FormBuilder.js            # Dynamic field creator
+    FieldRenderer.js          # Dynamic field renderer
+  App.js                      # Router setup
+  App.css                     # All styles
+supabase/
+  schema.sql                  # Tables + RLS policies
+  seed.sql                    # Seed data instructions
+```
 
-This section has moved here: [https://facebook.github.io/create-react-app/docs/code-splitting](https://facebook.github.io/create-react-app/docs/code-splitting)
+## Database Tables
 
-### Analyzing the Bundle Size
+| Table | Purpose |
+|-------|---------|
+| `departments` | Organization departments |
+| `profiles` | User profiles with role + department |
+| `classes` | Classes within departments |
+| `class_faculty` | Faculty ↔ Class assignment |
+| `class_students` | Student ↔ Class assignment |
+| `student_fields` | Dynamic form fields for students |
+| `student_field_values` | Student-submitted values |
+| `faculty_fields` | Dynamic form fields for faculty |
+| `faculty_field_values` | Faculty-submitted values |
 
-This section has moved here: [https://facebook.github.io/create-react-app/docs/analyzing-the-bundle-size](https://facebook.github.io/create-react-app/docs/analyzing-the-bundle-size)
+## RLS Policies Summary
 
-### Making a Progressive Web App
+- **Org Admin**: Full access to all tables
+- **Super Admin**: CRUD within their own department only
+- **Faculty**: Manage fields for assigned classes; read students in those classes
+- **Student**: Read own profile + assigned class fields; insert/update own field values
 
-This section has moved here: [https://facebook.github.io/create-react-app/docs/making-a-progressive-web-app](https://facebook.github.io/create-react-app/docs/making-a-progressive-web-app)
+## Important Notes
 
-### Advanced Configuration
-
-This section has moved here: [https://facebook.github.io/create-react-app/docs/advanced-configuration](https://facebook.github.io/create-react-app/docs/advanced-configuration)
-
-### Deployment
-
-This section has moved here: [https://facebook.github.io/create-react-app/docs/deployment](https://facebook.github.io/create-react-app/docs/deployment)
-
-### `npm run build` fails to minify
-
-This section has moved here: [https://facebook.github.io/create-react-app/docs/troubleshooting#npm-run-build-fails-to-minify](https://facebook.github.io/create-react-app/docs/troubleshooting#npm-run-build-fails-to-minify)
+- Supabase email confirmation may be enabled by default. To skip during development, go to Supabase Dashboard → Authentication → Settings → disable "Enable email confirmations".
+- All user creation uses `supabase.auth.signUp()` from the frontend with metadata, then updates the profile row.
+- The trigger `handle_new_user` auto-creates a profile row on signup.
