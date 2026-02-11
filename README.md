@@ -33,6 +33,8 @@ Edit `.env.local` in the project root:
 ```env
 REACT_APP_SUPABASE_URL=https://your-project.supabase.co
 REACT_APP_SUPABASE_ANON_KEY=your-anon-key-here
+# Optional: domain used when users type only a username at login
+REACT_APP_AUTH_EMAIL_DOMAIN=storeit.com
 ```
 
 ### 3. Install & Run
@@ -115,4 +117,5 @@ supabase/
 
 - Supabase email confirmation may be enabled by default. To skip during development, go to Supabase Dashboard → Authentication → Settings → disable "Enable email confirmations".
 - All user creation uses `supabase.auth.signUp()` from the frontend with metadata, then updates the profile row.
+- Login accepts either full email or username. Username login tries the configured domain (`REACT_APP_AUTH_EMAIL_DOMAIN`) and then fallback domains to reduce auth mismatch errors.
 - The trigger `handle_new_user` auto-creates a profile row on signup.
