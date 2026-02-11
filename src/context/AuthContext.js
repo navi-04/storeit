@@ -1,5 +1,6 @@
 import React, { createContext, useContext, useEffect, useState } from 'react';
 import { supabase } from '../supabaseClient';
+import { getLoginEmailCandidates, usernameToEmail } from '../utils/authEmail';
 
 const AuthContext = createContext({});
 
@@ -73,13 +74,26 @@ export function AuthProvider({ children }) {
     return () => subscription.unsubscribe();
   }, []);
 
-  const toEmail = (username) => `${username.toLowerCase().trim()}@storeit.app`;
+  const signIn = async (usernameOrEmail, password) => {
+    const emailCandidates = getLoginEmailCandidates(usernameOrEmail);
+    if (emailCandidates.length === 0) {
+      throw new Error('Please enter a valid username or email.');
+    }
 
-  const signIn = async (username, password) => {
-    const email = toEmail(username);
-    const { data, error } = await supabase.auth.signInWithPassword({ email, password });
-    if (error) throw error;
-    return data;
+    let lastError = null;
+    for (const email of emailCandidates) {
+      const { data, error } = await supabase.auth.signInWithPassword({ email, password });
+      if (!error) return data;
+
+      lastError = error;
+      // If this is not a credentials problem, fail fast to surface the real issue
+      const msg = (error.message || '').toLowerCase();
+      if (!msg.includes('invalid login credentials')) {
+        throw error;
+      }
+    }
+
+    throw lastError || new Error('Login failed');
   };
 
   const signOut = async () => {
@@ -89,7 +103,7 @@ export function AuthProvider({ children }) {
   };
 
   const signUp = async (username, password, metadata = {}) => {
-    const email = toEmail(username);
+    const email = usernameToEmail(username);
     const { data, error } = await supabase.auth.signUp({
       email,
       password,
@@ -108,7 +122,7 @@ export function AuthProvider({ children }) {
     signUp,
     refreshProfile: async () => {
       if (user) {
-        const p = await fetchProfile(user.id);
+        const p = await fetchProfile(user);
         setProfile(p);
       }
     },

@@ -44,13 +44,13 @@ export default function LoginPage() {
         <form onSubmit={handleSubmit}>
           {error && <div className="error-msg">{error}</div>}
           <div className="form-group">
-            <label>Username</label>
+            <label>Username or Email</label>
             <input
               type="text"
               value={username}
               onChange={(e) => setUsername(e.target.value)}
               required
-              placeholder="Enter your username"
+              placeholder="Enter your username or email"
               autoComplete="username"
             />
           </div>
