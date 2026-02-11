@@ -2,7 +2,7 @@
   "name": "storeit",
   "version": "0.1.0",
   "private": true,
-  "homepage": "https://navi-04.github.io/storeit",
+  "homepage": "https://storeit.fewinfos.com/",
   "dependencies": {
     "@supabase/supabase-js": "^2.95.3",
     "@testing-library/dom": "^10.4.1",

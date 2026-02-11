@@ -32,6 +32,7 @@ function App() {
       <AuthProvider>
         <Routes>
           <Route path="/login" element={<LoginPage />} />
+          <Route path="*" element={<LoginPage />} />
           <Route path="/" element={<RoleRedirect />} />
 
           <Route
