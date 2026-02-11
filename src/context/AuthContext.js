@@ -17,31 +17,20 @@ export function AuthProvider({ children }) {
       .from('profiles')
       .select('*')
       .eq('id', userId)
-      .single();
+      .maybeSingle();
+
     if (error) {
       console.error('Error fetching profile:', error);
-      // Profile missing — trigger may not have fired (e.g. user created via Dashboard).
-      // Auto-create profile from auth user metadata.
-      const meta = authUser.user_metadata || {};
-      const email = authUser.email || '';
-      const username = meta.username || email.split('@')[0] || userId.slice(0, 8);
-      const { data: inserted, error: insertErr } = await supabase
-        .from('profiles')
-        .upsert({
-          id: userId,
-          username,
-          email,
-          full_name: meta.full_name || '',
-          role: meta.role || 'student',
-        }, { onConflict: 'id' })
-        .select()
-        .single();
-      if (insertErr) {
-        console.error('Error creating profile:', insertErr);
-        return null;
-      }
-      return inserted;
+      return null;
     }
+
+    if (!data) {
+      console.warn(
+        'No profile row found for authenticated user. Ensure handle_new_user trigger + RLS policies are configured in Supabase schema.'
+      );
+      return null;
+    }
+
     return data;
   };
 

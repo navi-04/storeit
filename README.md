@@ -46,6 +46,22 @@ npm start
 
 The app runs at `http://localhost:3000`.
 
+### Troubleshooting local setup
+
+If you see this error:
+
+```
+Module not found: Error: Can't resolve '@supabase/supabase-js'
+```
+
+run:
+
+```bash
+npm ci
+```
+
+(or `npm install`), then start again. The project now includes a preflight dependency check before `npm start`/`npm run build` that will tell you exactly which package is missing.
+
 ### 4. Create the First Org Admin
 
 1. In Supabase Dashboard → Authentication → Users → **Add User**.
