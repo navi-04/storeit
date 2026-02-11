@@ -1,7 +1,5 @@
-
 import React, { createContext, useCallback, useContext, useEffect, useState } from 'react';
 import { supabase, supabaseConfigError } from '../supabaseClient';
-
 import { getLoginEmailCandidates, usernameToEmail } from '../utils/authEmail';
 
 const AuthContext = createContext({});
@@ -9,11 +7,15 @@ const AuthContext = createContext({});
 export const useAuth = () => useContext(AuthContext);
 
 const PROFILE_FETCH_TIMEOUT_MS = 5000;
+const PROFILE_POLICY_RECURSION_CODE = '42P17';
+const PROFILE_POLICY_RECURSION_MESSAGE =
+  'Your Supabase RLS policies are causing recursive reads (42P17). Fix the policy on class_students/profiles and try again.';
 
 export function AuthProvider({ children }) {
   const [user, setUser] = useState(null);
   const [profile, setProfile] = useState(null);
   const [loading, setLoading] = useState(true);
+  const [authError, setAuthError] = useState('');
 
   const fetchProfile = useCallback(async (authUser) => {
     if (!supabase || !authUser?.id) return null;
@@ -21,12 +23,18 @@ export function AuthProvider({ children }) {
     const { data, error } = await supabase
       .from('profiles')
       .select('*')
-
       .eq('id', authUser.id)
       .maybeSingle();
 
     if (error) {
+      if (error.code === PROFILE_POLICY_RECURSION_CODE) {
+        console.warn(PROFILE_POLICY_RECURSION_MESSAGE, error);
+        setAuthError(PROFILE_POLICY_RECURSION_MESSAGE);
+        return null;
+      }
+
       console.error('Error fetching profile:', error);
+      setAuthError('Unable to load your profile. Please check Supabase RLS policies.');
       return null;
     }
 
@@ -34,10 +42,11 @@ export function AuthProvider({ children }) {
       console.warn(
         'No profile row found for authenticated user. Ensure handle_new_user trigger + RLS policies are configured in Supabase schema.'
       );
+      setAuthError('No profile row found for this account. Please check Supabase setup.');
       return null;
-
     }
 
+    setAuthError('');
     return data;
   }, []);
 
@@ -54,16 +63,17 @@ export function AuthProvider({ children }) {
 
       if (result === timeoutSentinel) {
         console.warn('Profile fetch timed out; continuing without profile data.');
+        setAuthError('Profile lookup timed out. Please verify Supabase network/policy configuration.');
         return null;
       }
 
       return result;
     } catch (err) {
       console.error('Unexpected profile fetch error:', err);
+      setAuthError('Unexpected profile lookup error. Check browser console and Supabase logs.');
       return null;
     }
   }, [fetchProfile]);
-
 
   useEffect(() => {
     if (!supabase) {
@@ -88,6 +98,7 @@ export function AuthProvider({ children }) {
 
         if (error) {
           console.error('Error getting auth session:', error);
+          setAuthError('Unable to initialize auth session.');
           safeSetAuthState(null, null);
           return;
         }
@@ -96,10 +107,12 @@ export function AuthProvider({ children }) {
           const p = await fetchProfileWithTimeout(session.user);
           safeSetAuthState(session.user, p);
         } else {
+          setAuthError('');
           safeSetAuthState(null, null);
         }
       } catch (err) {
         console.error('Unexpected auth initialization error:', err);
+        setAuthError('Unexpected auth initialization error.');
         safeSetAuthState(null, null);
       } finally {
         if (isMounted) setLoading(false);
@@ -124,10 +137,12 @@ export function AuthProvider({ children }) {
           const p = await fetchProfileWithTimeout(session.user);
           if (isMounted) setProfile(p);
         } else {
+          setAuthError('');
           safeSetAuthState(null, null);
         }
       } catch (err) {
         console.error('Error handling auth state change:', err);
+        setAuthError('Unable to process auth state changes.');
         safeSetAuthState(null, null);
       } finally {
         if (isMounted) setLoading(false);
@@ -143,6 +158,8 @@ export function AuthProvider({ children }) {
 
   const signIn = async (usernameOrEmail, password) => {
     if (!supabase) throw new Error(supabaseConfigError || 'Supabase is not configured.');
+
+    setAuthError('');
 
     const emailCandidates = getLoginEmailCandidates(usernameOrEmail);
     if (emailCandidates.length === 0) {
@@ -170,6 +187,7 @@ export function AuthProvider({ children }) {
     await supabase.auth.signOut();
     setUser(null);
     setProfile(null);
+    setAuthError('');
   };
 
   const signUp = async (username, password, metadata = {}) => {
@@ -189,6 +207,7 @@ export function AuthProvider({ children }) {
     user,
     profile,
     loading,
+    authError,
     configError: supabaseConfigError,
     signIn,
     signOut,

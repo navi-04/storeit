@@ -7,7 +7,7 @@ export default function LoginPage() {
   const [password, setPassword] = useState('');
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
-  const { signIn, profile, configError } = useAuth();
+  const { signIn, user, profile, configError, authError } = useAuth();
   const navigate = useNavigate();
 
   // Once profile is loaded after sign-in, redirect
@@ -22,6 +22,21 @@ export default function LoginPage() {
       navigate(roleRoutes[profile.role] || '/', { replace: true });
     }
   }, [profile, navigate]);
+
+  useEffect(() => {
+    if (authError) {
+      setError(authError);
+      setLoading(false);
+    }
+
+    if (user && !profile && !authError) {
+      setLoading(true);
+    }
+
+    if (!user) {
+      setLoading(false);
+    }
+  }, [authError, profile, user]);
 
   const handleSubmit = async (e) => {
     e.preventDefault();
