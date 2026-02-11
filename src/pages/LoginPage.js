@@ -7,7 +7,7 @@ export default function LoginPage() {
   const [password, setPassword] = useState('');
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
-  const { signIn, profile } = useAuth();
+  const { signIn, profile, configError } = useAuth();
   const navigate = useNavigate();
 
   // Once profile is loaded after sign-in, redirect
@@ -42,6 +42,7 @@ export default function LoginPage() {
         <h1>StoreIt</h1>
         <p className="text-muted">Student Detail Management</p>
         <form onSubmit={handleSubmit}>
+          {configError && <div className="error-msg">{configError}</div>}
           {error && <div className="error-msg">{error}</div>}
           <div className="form-group">
             <label>Username or Email</label>
@@ -52,6 +53,7 @@ export default function LoginPage() {
               required
               placeholder="Enter your username or email"
               autoComplete="username"
+              disabled={Boolean(configError)}
             />
           </div>
           <div className="form-group">
@@ -62,9 +64,10 @@ export default function LoginPage() {
               onChange={(e) => setPassword(e.target.value)}
               required
               placeholder="Enter your password"
+              disabled={Boolean(configError)}
             />
           </div>
-          <button className="btn btn-block" type="submit" disabled={loading}>
+          <button className="btn btn-block" type="submit" disabled={loading || Boolean(configError)}>
             {loading ? 'Signing in...' : 'Sign In'}
           </button>
         </form>
