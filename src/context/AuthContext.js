@@ -6,7 +6,7 @@ const AuthContext = createContext({});
 
 export const useAuth = () => useContext(AuthContext);
 
-const PROFILE_FETCH_TIMEOUT_MS = 5000;
+const PROFILE_FETCH_TIMEOUT_MS = 15000;
 const PROFILE_POLICY_RECURSION_CODE = '42P17';
 const PROFILE_POLICY_RECURSION_MESSAGE =
   'Your Supabase RLS policies are causing recursive reads (42P17). Fix the policy on class_students/profiles and try again.';

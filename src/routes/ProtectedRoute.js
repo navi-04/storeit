@@ -5,16 +5,17 @@ import { useAuth } from '../context/AuthContext';
 export default function ProtectedRoute({ children, allowedRoles }) {
   const { user, profile, loading } = useAuth();
 
-  if (!user) {
-    return <Navigate to="/login" replace />;
-  }
-
   if (loading) {
     return <div className="loading-screen">Loading...</div>;
   }
 
-  if (!profile) {
+  if (!user) {
     return <Navigate to="/login" replace />;
+  }
+
+  if (!profile) {
+    // Profile is still being fetched — show loading instead of redirecting
+    return <div className="loading-screen">Loading profile...</div>;
   }
 
   if (allowedRoles && !allowedRoles.includes(profile.role)) {

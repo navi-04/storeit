@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { supabase } from '../supabaseClient';
+import { supabase, supabaseAdmin } from '../supabaseClient';
 import { usernameToEmail } from '../utils/authEmail';
 import Navbar from '../components/Navbar';
 
@@ -50,6 +50,16 @@ export default function OrgAdminDashboard() {
     setDeptLoading(false);
   };
 
+  const deleteDepartment = async (id) => {
+    if (!window.confirm('Delete this department? All related classes and users will be affected.')) return;
+    setError(''); setSuccess('');
+    const { error } = await supabase.from('departments').delete().eq('id', id);
+    if (error) { setError(error.message); return; }
+    setSuccess('Department deleted!');
+    loadDepartments();
+    loadSuperAdmins();
+  };
+
   const createSuperAdmin = async (e) => {
     e.preventDefault();
     if (!saForm.username || !saForm.password || !saForm.department_id) {
@@ -60,9 +70,9 @@ export default function OrgAdminDashboard() {
     setError('');
     setSuccess('');
     try {
-      // Sign up the user with metadata
+      // Use supabaseAdmin (non-session-persisting client) so admin session is NOT replaced
       const fakeEmail = usernameToEmail(saForm.username);
-      const { data: signUpData, error: signUpError } = await supabase.auth.signUp({
+      const { data: signUpData, error: signUpError } = await supabaseAdmin.auth.signUp({
         email: fakeEmail,
         password: saForm.password,
         options: {
@@ -98,6 +108,17 @@ export default function OrgAdminDashboard() {
     setSaLoading(false);
   };
 
+  const deleteSuperAdmin = async (id, username) => {
+    if (!window.confirm(`Delete super admin "${username}"? This cannot be undone.`)) return;
+    setError(''); setSuccess('');
+    try {
+      const { error } = await supabase.from('profiles').delete().eq('id', id);
+      if (error) throw error;
+      setSuccess('Super Admin deleted!');
+      loadSuperAdmins();
+    } catch (err) { setError(err.message); }
+  };
+
   return (
     <div className="dashboard">
       <Navbar />
@@ -122,19 +143,22 @@ export default function OrgAdminDashboard() {
             </button>
           </form>
 
-          <h4>Existing Departments</h4>
+          <h4>Existing Departments ({departments.length})</h4>
           {departments.length === 0 ? (
             <p className="text-muted">No departments yet.</p>
           ) : (
             <table className="table">
               <thead>
-                <tr><th>Name</th><th>Created</th></tr>
+                <tr><th>Name</th><th>Created</th><th>Actions</th></tr>
               </thead>
               <tbody>
                 {departments.map((d) => (
                   <tr key={d.id}>
                     <td>{d.name}</td>
                     <td>{new Date(d.created_at).toLocaleDateString()}</td>
+                    <td>
+                      <button className="btn btn-sm btn-danger" onClick={() => deleteDepartment(d.id)}>Delete</button>
+                    </td>
                   </tr>
                 ))}
               </tbody>
@@ -193,13 +217,13 @@ export default function OrgAdminDashboard() {
             </button>
           </form>
 
-          <h4>Existing Super Admins</h4>
+          <h4>Existing Super Admins ({superAdmins.length})</h4>
           {superAdmins.length === 0 ? (
             <p className="text-muted">No super admins yet.</p>
           ) : (
             <table className="table">
               <thead>
-                <tr><th>Name</th><th>Username</th><th>Department</th></tr>
+                <tr><th>Name</th><th>Username</th><th>Department</th><th>Actions</th></tr>
               </thead>
               <tbody>
                 {superAdmins.map((sa) => (
@@ -207,6 +231,9 @@ export default function OrgAdminDashboard() {
                     <td>{sa.full_name}</td>
                     <td>{sa.username}</td>
                     <td>{sa.departments?.name || '—'}</td>
+                    <td>
+                      <button className="btn btn-sm btn-danger" onClick={() => deleteSuperAdmin(sa.id, sa.username)}>Delete</button>
+                    </td>
                   </tr>
                 ))}
               </tbody>

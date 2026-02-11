@@ -10,10 +10,11 @@ import StudentDashboard from './pages/StudentDashboard';
 import './App.css';
 
 function RoleRedirect() {
-  const { user, profile } = useAuth();
+  const { user, profile, loading } = useAuth();
 
+  if (loading) return <div className="loading-screen">Loading...</div>;
   if (!user) return <Navigate to="/login" replace />;
-  if (!profile) return <Navigate to="/login" replace />;
+  if (!profile) return <div className="loading-screen">Loading profile...</div>;
 
   const roleRoutes = {
     org_admin: '/org',

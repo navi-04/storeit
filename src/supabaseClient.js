@@ -11,3 +11,15 @@ export const supabaseConfigError =
 export const supabase = supabaseConfigError
   ? null
   : createClient(supabaseUrl, supabaseAnonKey);
+
+// A separate client that does NOT persist sessions.
+// Use this for creating users (signUp) so the admin's session is never replaced.
+export const supabaseAdmin = supabaseConfigError
+  ? null
+  : createClient(supabaseUrl, supabaseAnonKey, {
+      auth: {
+        persistSession: false,
+        autoRefreshToken: false,
+        detectSessionInUrl: false,
+      },
+    });

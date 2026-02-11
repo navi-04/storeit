@@ -6,54 +6,80 @@ import FieldRenderer from '../components/FieldRenderer';
 
 export default function StudentDashboard() {
   const { user } = useAuth();
-  const [loading, setLoading] = useState(false);
+  const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
   const [success, setSuccess] = useState('');
 
-  const [assignedClasses, setAssignedClasses] = useState([]);
-  const [selectedClassId, setSelectedClassId] = useState('');
-  const [fields, setFields] = useState([]);
+  const [assignedClass, setAssignedClass] = useState(null);
+  const [sections, setSections] = useState([]);
   const [values, setValues] = useState({});
 
-  const fetchAssignedClasses = useCallback(async () => {
+  // Auto-detect the single class this student belongs to
+  const fetchAssignedClass = useCallback(async () => {
     if (!user) return;
     setLoading(true);
-    const { data, error } = await supabase
-      .from('class_students')
-      .select('class_id, classes(id, name)')
-      .eq('student_id', user.id);
-    if (error) { setError(error.message); setLoading(false); return; }
-    const cls = (data || []).map((cs) => cs.classes).filter(Boolean);
-    setAssignedClasses(cls);
-    if (cls.length > 0 && !selectedClassId) {
-      setSelectedClassId(cls[0].id);
+    try {
+      const { data, error } = await supabase
+        .from('class_students')
+        .select('class_id, classes(id, name)')
+        .eq('student_id', user.id)
+        .limit(1)
+        .single();
+      if (error) {
+        if (error.code === 'PGRST116') {
+          // No rows — student not assigned to any class
+          setAssignedClass(null);
+        } else {
+          throw error;
+        }
+      } else {
+        setAssignedClass(data?.classes || null);
+      }
+    } catch (err) {
+      setError(err.message);
+    } finally {
+      setLoading(false);
     }
-    setLoading(false);
-  }, [user, selectedClassId]);
+  }, [user]);
 
-  const fetchFieldsAndValues = useCallback(async () => {
-    if (!selectedClassId || !user) return;
+  // Fetch sections + fields + student's values
+  const fetchSectionsAndValues = useCallback(async () => {
+    if (!assignedClass || !user) return;
     setLoading(true);
     try {
-      // Fetch student fields for this class
-      const { data: fieldData, error: fieldErr } = await supabase
-        .from('student_fields')
+      const { data: secData, error: secErr } = await supabase
+        .from('student_sections')
         .select('*')
-        .eq('class_id', selectedClassId)
-        .order('field_order');
-      if (fieldErr) throw fieldErr;
-      setFields(fieldData || []);
+        .eq('class_id', assignedClass.id)
+        .order('section_order');
+      if (secErr) throw secErr;
 
-      // Fetch student's own values
-      if (fieldData && fieldData.length > 0) {
-        const fieldIds = fieldData.map((f) => f.id);
-        const { data: valData, error: valErr } = await supabase
+      const secs = secData || [];
+      if (secs.length === 0) { setSections([]); setValues({}); setLoading(false); return; }
+
+      const sectionIds = secs.map((s) => s.id);
+      const { data: fieldData, error: fErr } = await supabase
+        .from('student_section_fields')
+        .select('*')
+        .in('section_id', sectionIds)
+        .order('field_order');
+      if (fErr) throw fErr;
+
+      const result = secs.map((sec) => ({
+        ...sec,
+        fields: (fieldData || []).filter((f) => f.section_id === sec.id),
+      }));
+      setSections(result);
+
+      // Fetch student's values
+      const allFieldIds = (fieldData || []).map((f) => f.id);
+      if (allFieldIds.length > 0) {
+        const { data: valData } = await supabase
           .from('student_field_values')
           .select('*')
-          .in('field_id', fieldIds)
+          .in('field_id', allFieldIds)
           .eq('student_id', user.id);
-        if (valErr) throw valErr;
         const valMap = {};
         (valData || []).forEach((v) => { valMap[v.field_id] = v.value; });
         setValues(valMap);
@@ -65,17 +91,18 @@ export default function StudentDashboard() {
     } finally {
       setLoading(false);
     }
-  }, [selectedClassId, user]);
+  }, [assignedClass, user]);
 
-  useEffect(() => { fetchAssignedClasses(); }, [fetchAssignedClasses]);
-  useEffect(() => { fetchFieldsAndValues(); }, [fetchFieldsAndValues]);
+  useEffect(() => { fetchAssignedClass(); }, [fetchAssignedClass]);
+  useEffect(() => { fetchSectionsAndValues(); }, [fetchSectionsAndValues]);
 
   const handleSubmit = async () => {
     setError('');
     setSuccess('');
     setSaving(true);
     try {
-      for (const field of fields) {
+      const allFields = sections.flatMap((s) => s.fields);
+      for (const field of allFields) {
         const value = values[field.id] || '';
         const { error } = await supabase
           .from('student_field_values')
@@ -103,49 +130,42 @@ export default function StudentDashboard() {
         {error && <div className="error-msg">{error}</div>}
         {success && <div className="success-msg">{success}</div>}
 
-        {/* Class Selector */}
-        <div className="card">
-          <div className="form-group">
-            <label>Your Class</label>
-            <select
-              value={selectedClassId}
-              onChange={(e) => setSelectedClassId(e.target.value)}
-            >
-              {assignedClasses.length === 0 && <option value="">No classes assigned</option>}
-              {assignedClasses.map((c) => (
-                <option key={c.id} value={c.id}>{c.name}</option>
-              ))}
-            </select>
-          </div>
-        </div>
-
-        {/* Dynamic Form */}
-        {selectedClassId && (
+        {loading ? (
+          <p>Loading...</p>
+        ) : !assignedClass ? (
           <div className="card">
-            <h3>Your Details</h3>
-            {loading ? (
-              <p>Loading fields...</p>
-            ) : fields.length === 0 ? (
-              <p className="text-muted">No fields created by your faculty yet.</p>
-            ) : (
-              <>
-                <FieldRenderer
-                  fields={fields}
-                  values={values}
-                  onChange={setValues}
-                  disabled={saving}
-                />
-                <button
-                  className="btn"
-                  onClick={handleSubmit}
-                  disabled={saving}
-                  style={{ marginTop: '1rem' }}
-                >
-                  {saving ? 'Saving...' : 'Save Details'}
-                </button>
-              </>
-            )}
+            <p className="text-muted">You have not been assigned to any class yet. Please contact your administrator.</p>
           </div>
+        ) : (
+          <>
+            <div className="card">
+              <p><strong>Class:</strong> {assignedClass.name}</p>
+            </div>
+
+            <div className="card">
+              <h3>Your Details</h3>
+              {sections.length === 0 ? (
+                <p className="text-muted">No sections created by your faculty yet.</p>
+              ) : (
+                <>
+                  <FieldRenderer
+                    sections={sections}
+                    values={values}
+                    onChange={setValues}
+                    disabled={saving}
+                  />
+                  <button
+                    className="btn"
+                    onClick={handleSubmit}
+                    disabled={saving}
+                    style={{ marginTop: '1rem' }}
+                  >
+                    {saving ? 'Saving...' : 'Save Details'}
+                  </button>
+                </>
+              )}
+            </div>
+          </>
         )}
       </div>
     </div>

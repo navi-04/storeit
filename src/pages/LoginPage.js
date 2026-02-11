@@ -30,7 +30,9 @@ export default function LoginPage() {
     }
 
     if (user && !profile && !authError) {
+      // Profile is being fetched — show loading but don't show error yet
       setLoading(true);
+      setError('');
     }
 
     if (!user) {
