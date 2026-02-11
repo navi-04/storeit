@@ -18,7 +18,11 @@
     "start": "react-scripts start",
     "build": "react-scripts build",
     "test": "react-scripts test",
-    "eject": "react-scripts eject"
+    "eject": "react-scripts eject",
+    "setup": "npm ci",
+    "verify:deps": "node scripts/verify-deps.js",
+    "prestart": "npm run verify:deps",
+    "prebuild": "npm run verify:deps"
   },
   "eslintConfig": {
     "extends": [

@@ -1,95 +1,199 @@
-import React, { createContext, useContext, useEffect, useState } from 'react';
-import { supabase } from '../supabaseClient';
+import React, { createContext, useCallback, useContext, useEffect, useState } from 'react';
+import { supabase, supabaseConfigError } from '../supabaseClient';
+import { getLoginEmailCandidates, usernameToEmail } from '../utils/authEmail';
 
 const AuthContext = createContext({});
 
 export const useAuth = () => useContext(AuthContext);
 
+const PROFILE_FETCH_TIMEOUT_MS = 5000;
+const PROFILE_POLICY_RECURSION_CODE = '42P17';
+const PROFILE_POLICY_RECURSION_MESSAGE =
+  'Your Supabase RLS policies are causing recursive reads (42P17). Fix the policy on class_students/profiles and try again.';
+
 export function AuthProvider({ children }) {
   const [user, setUser] = useState(null);
   const [profile, setProfile] = useState(null);
   const [loading, setLoading] = useState(true);
+  const [authError, setAuthError] = useState('');
 
-  const fetchProfile = async (authUser) => {
-    const userId = authUser.id;
+  const fetchProfile = useCallback(async (authUser) => {
+    if (!supabase || !authUser?.id) return null;
+
     const { data, error } = await supabase
       .from('profiles')
       .select('*')
-      .eq('id', userId)
-      .single();
+      .eq('id', authUser.id)
+      .maybeSingle();
+
     if (error) {
-      console.error('Error fetching profile:', error);
-      // Profile missing — trigger may not have fired (e.g. user created via Dashboard).
-      // Auto-create profile from auth user metadata.
-      const meta = authUser.user_metadata || {};
-      const email = authUser.email || '';
-      const username = meta.username || email.split('@')[0] || userId.slice(0, 8);
-      const { data: inserted, error: insertErr } = await supabase
-        .from('profiles')
-        .upsert({
-          id: userId,
-          username,
-          email,
-          full_name: meta.full_name || '',
-          role: meta.role || 'student',
-        }, { onConflict: 'id' })
-        .select()
-        .single();
-      if (insertErr) {
-        console.error('Error creating profile:', insertErr);
+      if (error.code === PROFILE_POLICY_RECURSION_CODE) {
+        console.warn(PROFILE_POLICY_RECURSION_MESSAGE, error);
+        setAuthError(PROFILE_POLICY_RECURSION_MESSAGE);
         return null;
       }
-      return inserted;
+
+      console.error('Error fetching profile:', error);
+      setAuthError('Unable to load your profile. Please check Supabase RLS policies.');
+      return null;
     }
+
+    if (!data) {
+      console.warn(
+        'No profile row found for authenticated user. Ensure handle_new_user trigger + RLS policies are configured in Supabase schema.'
+      );
+      setAuthError('No profile row found for this account. Please check Supabase setup.');
+      return null;
+    }
+
+    setAuthError('');
     return data;
-  };
-
-  useEffect(() => {
-    // Get initial session
-    supabase.auth.getSession().then(async ({ data: { session } }) => {
-      if (session?.user) {
-        setUser(session.user);
-        const p = await fetchProfile(session.user);
-        setProfile(p);
-      }
-      setLoading(false);
-    });
-
-    // Listen for auth changes
-    const { data: { subscription } } = supabase.auth.onAuthStateChange(
-      async (event, session) => {
-        if (session?.user) {
-          setUser(session.user);
-          const p = await fetchProfile(session.user);
-          setProfile(p);
-        } else {
-          setUser(null);
-          setProfile(null);
-        }
-        setLoading(false);
-      }
-    );
-
-    return () => subscription.unsubscribe();
   }, []);
 
-  const toEmail = (username) => `${username.toLowerCase().trim()}@storeit.app`;
+  const fetchProfileWithTimeout = useCallback(async (authUser) => {
+    if (!supabase || !authUser?.id) return null;
 
-  const signIn = async (username, password) => {
-    const email = toEmail(username);
-    const { data, error } = await supabase.auth.signInWithPassword({ email, password });
-    if (error) throw error;
-    return data;
+    try {
+      const timeoutSentinel = Symbol('profile-timeout');
+      const timeoutPromise = new Promise((resolve) => {
+        setTimeout(() => resolve(timeoutSentinel), PROFILE_FETCH_TIMEOUT_MS);
+      });
+
+      const result = await Promise.race([fetchProfile(authUser), timeoutPromise]);
+
+      if (result === timeoutSentinel) {
+        console.warn('Profile fetch timed out; continuing without profile data.');
+        setAuthError('Profile lookup timed out. Please verify Supabase network/policy configuration.');
+        return null;
+      }
+
+      return result;
+    } catch (err) {
+      console.error('Unexpected profile fetch error:', err);
+      setAuthError('Unexpected profile lookup error. Check browser console and Supabase logs.');
+      return null;
+    }
+  }, [fetchProfile]);
+
+  useEffect(() => {
+    if (!supabase) {
+      setLoading(false);
+      return undefined;
+    }
+
+    let isMounted = true;
+
+    const safeSetAuthState = (nextUser, nextProfile) => {
+      if (!isMounted) return;
+      setUser(nextUser);
+      setProfile(nextProfile);
+    };
+
+    const initializeAuth = async () => {
+      try {
+        const {
+          data: { session },
+          error,
+        } = await supabase.auth.getSession();
+
+        if (error) {
+          console.error('Error getting auth session:', error);
+          setAuthError('Unable to initialize auth session.');
+          safeSetAuthState(null, null);
+          return;
+        }
+
+        if (session?.user) {
+          const p = await fetchProfileWithTimeout(session.user);
+          safeSetAuthState(session.user, p);
+        } else {
+          setAuthError('');
+          safeSetAuthState(null, null);
+        }
+      } catch (err) {
+        console.error('Unexpected auth initialization error:', err);
+        setAuthError('Unexpected auth initialization error.');
+        safeSetAuthState(null, null);
+      } finally {
+        if (isMounted) setLoading(false);
+      }
+    };
+
+    initializeAuth();
+
+    const loadingTimeout = setTimeout(() => {
+      if (isMounted) setLoading(false);
+    }, 8000);
+
+    const {
+      data: { subscription },
+    } = supabase.auth.onAuthStateChange(async (_event, session) => {
+      try {
+        if (session?.user) {
+          if (isMounted) {
+            setUser(session.user);
+            setLoading(false);
+          }
+          const p = await fetchProfileWithTimeout(session.user);
+          if (isMounted) setProfile(p);
+        } else {
+          setAuthError('');
+          safeSetAuthState(null, null);
+        }
+      } catch (err) {
+        console.error('Error handling auth state change:', err);
+        setAuthError('Unable to process auth state changes.');
+        safeSetAuthState(null, null);
+      } finally {
+        if (isMounted) setLoading(false);
+      }
+    });
+
+    return () => {
+      isMounted = false;
+      clearTimeout(loadingTimeout);
+      subscription.unsubscribe();
+    };
+  }, [fetchProfileWithTimeout]);
+
+  const signIn = async (usernameOrEmail, password) => {
+    if (!supabase) throw new Error(supabaseConfigError || 'Supabase is not configured.');
+
+    setAuthError('');
+
+    const emailCandidates = getLoginEmailCandidates(usernameOrEmail);
+    if (emailCandidates.length === 0) {
+      throw new Error('Please enter a valid username or email.');
+    }
+
+    let lastError = null;
+    for (const email of emailCandidates) {
+      const { data, error } = await supabase.auth.signInWithPassword({ email, password });
+      if (!error) return data;
+
+      lastError = error;
+      const msg = (error.message || '').toLowerCase();
+      if (!msg.includes('invalid login credentials')) {
+        throw error;
+      }
+    }
+
+    throw lastError || new Error('Login failed');
   };
 
   const signOut = async () => {
+    if (!supabase) return;
+
     await supabase.auth.signOut();
     setUser(null);
     setProfile(null);
+    setAuthError('');
   };
 
   const signUp = async (username, password, metadata = {}) => {
-    const email = toEmail(username);
+    if (!supabase) throw new Error(supabaseConfigError || 'Supabase is not configured.');
+
+    const email = usernameToEmail(username);
     const { data, error } = await supabase.auth.signUp({
       email,
       password,
@@ -103,12 +207,14 @@ export function AuthProvider({ children }) {
     user,
     profile,
     loading,
+    authError,
+    configError: supabaseConfigError,
     signIn,
     signOut,
     signUp,
     refreshProfile: async () => {
       if (user) {
-        const p = await fetchProfile(user.id);
+        const p = await fetchProfile(user);
         setProfile(p);
       }
     },

@@ -1,5 +1,6 @@
 import React, { useEffect, useState, useCallback } from 'react';
 import { supabase } from '../supabaseClient';
+import { usernameToEmail } from '../utils/authEmail';
 import { useAuth } from '../context/AuthContext';
 import Navbar from '../components/Navbar';
 
@@ -73,7 +74,7 @@ export default function SuperAdminDashboard() {
     clearMsg();
     setLoading(true);
     try {
-      const fakeEmail = `${facUsername.toLowerCase().trim()}@storeit.app`;
+      const fakeEmail = usernameToEmail(facUsername);
       const { data, error: signUpError } = await supabase.auth.signUp({
         email: fakeEmail,
         password: facPassword,
@@ -100,7 +101,7 @@ export default function SuperAdminDashboard() {
     clearMsg();
     setLoading(true);
     try {
-      const fakeEmail = `${stuUsername.toLowerCase().trim()}@storeit.app`;
+      const fakeEmail = usernameToEmail(stuUsername);
       const { data, error: signUpError } = await supabase.auth.signUp({
         email: fakeEmail,
         password: stuPassword,
