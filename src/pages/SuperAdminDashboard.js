@@ -33,8 +33,12 @@ export default function SuperAdminDashboard() {
   const [assignStuClassId, setAssignStuClassId] = useState('');
   const [assignStuId, setAssignStuId] = useState('');
 
-  // Faculty sections management
-  const [fieldClassId, setFieldClassId] = useState('');
+  // Student sections management (super admin creates these)
+  const [studentFieldClassId, setStudentFieldClassId] = useState('');
+  const [studentSections, setStudentSections] = useState([]);
+
+  // Faculty sections management (super admin creates these)
+  const [facultyFieldClassId, setFacultyFieldClassId] = useState('');
   const [facultySections, setFacultySections] = useState([]);
 
   // Assigned faculty/students per class
@@ -46,6 +50,11 @@ export default function SuperAdminDashboard() {
   const [importPreview, setImportPreview] = useState([]);
   const [importFileName, setImportFileName] = useState('');
   const fileInputRef = useRef(null);
+
+  // View data
+  const [viewClassId, setViewClassId] = useState('');
+  const [viewStudentData, setViewStudentData] = useState({ sections: [], students: [], submissions: {} });
+  const [viewFacultyData, setViewFacultyData] = useState({ sections: [], faculty: [], submissions: {} });
 
   const deptId = profile?.department_id;
 
@@ -60,7 +69,6 @@ export default function SuperAdminDashboard() {
     if (facRes.data) setFaculty(facRes.data);
     if (stuRes.data) setStudents(stuRes.data);
 
-    // Fetch class assignments
     const [cfRes, csRes] = await Promise.all([
       supabase.from('class_faculty').select('*, profiles(id, full_name, username)').order('created_at'),
       supabase.from('class_students').select('*, profiles(id, full_name, username)').order('created_at'),
@@ -79,122 +87,23 @@ export default function SuperAdminDashboard() {
     setClassStudentMap(csMap);
   }, [deptId]);
 
-  useEffect(() => {
-    fetchData();
-  }, [fetchData]);
+  useEffect(() => { fetchData(); }, [fetchData]);
 
   const clearMsg = () => { setError(''); setSuccess(''); };
 
+  // ======================== CLASS CRUD ========================
+
   const createClass = async (e) => {
-    e.preventDefault();
-    clearMsg();
+    e.preventDefault(); clearMsg();
     if (!className.trim()) return;
     setLoading(true);
     try {
-      const { error } = await supabase.from('classes').insert({
-        name: className.trim(),
-        department_id: deptId,
-      });
+      const { error } = await supabase.from('classes').insert({ name: className.trim(), department_id: deptId });
       if (error) throw error;
-      setSuccess('Class created!');
-      setClassName('');
-      await fetchData();
+      setSuccess('Class created!'); setClassName(''); await fetchData();
     } catch (err) { setError(err.message); }
     finally { setLoading(false); }
   };
-
-  const createFaculty = async (e) => {
-    e.preventDefault();
-    clearMsg();
-    setLoading(true);
-    try {
-      const fakeEmail = usernameToEmail(facUsername);
-      // Use supabaseAdmin so admin session is NOT replaced
-      const { data, error: signUpError } = await supabaseAdmin.auth.signUp({
-        email: fakeEmail,
-        password: facPassword,
-        options: { data: { full_name: facName, role: 'faculty', username: facUsername.trim() } },
-      });
-      if (signUpError) throw signUpError;
-      if (data.user) {
-        await supabase.from('profiles').update({
-          role: 'faculty',
-          department_id: deptId,
-          full_name: facName,
-          username: facUsername.trim(),
-        }).eq('id', data.user.id);
-      }
-      setSuccess('Faculty created!');
-      setFacName(''); setFacUsername(''); setFacPassword('');
-      await fetchData();
-    } catch (err) { setError(err.message); }
-    finally { setLoading(false); }
-  };
-
-  const createStudent = async (e) => {
-    e.preventDefault();
-    clearMsg();
-    setLoading(true);
-    try {
-      const fakeEmail = usernameToEmail(stuUsername);
-      // Use supabaseAdmin so admin session is NOT replaced
-      const { data, error: signUpError } = await supabaseAdmin.auth.signUp({
-        email: fakeEmail,
-        password: stuPassword,
-        options: { data: { full_name: stuName, role: 'student', username: stuUsername.trim() } },
-      });
-      if (signUpError) throw signUpError;
-      if (data.user) {
-        await supabase.from('profiles').update({
-          role: 'student',
-          department_id: deptId,
-          full_name: stuName,
-          username: stuUsername.trim(),
-        }).eq('id', data.user.id);
-      }
-      setSuccess('Student created!');
-      setStuName(''); setStuUsername(''); setStuPassword('');
-      await fetchData();
-    } catch (err) { setError(err.message); }
-    finally { setLoading(false); }
-  };
-
-  const assignFacultyToClass = async (e) => {
-    e.preventDefault();
-    clearMsg();
-    if (!assignFacClassId || !assignFacId) return;
-    setLoading(true);
-    try {
-      const { error } = await supabase.from('class_faculty').insert({
-        class_id: assignFacClassId,
-        faculty_id: assignFacId,
-      });
-      if (error) throw error;
-      setSuccess('Faculty assigned to class!');
-      setAssignFacClassId(''); setAssignFacId('');
-    } catch (err) { setError(err.message); }
-    finally { setLoading(false); }
-  };
-
-  const assignStudentToClass = async (e) => {
-    e.preventDefault();
-    clearMsg();
-    if (!assignStuClassId || !assignStuId) return;
-    setLoading(true);
-    try {
-      const { error } = await supabase.from('class_students').insert({
-        class_id: assignStuClassId,
-        student_id: assignStuId,
-      });
-      if (error) throw error;
-      setSuccess('Student added to class!');
-      setAssignStuClassId(''); setAssignStuId('');
-      await fetchData();
-    } catch (err) { setError(err.message); }
-    finally { setLoading(false); }
-  };
-
-  // ---- DELETE FUNCTIONS ----
 
   const deleteClass = async (id, name) => {
     if (!window.confirm(`Delete class "${name}"? All fields and assignments will be removed.`)) return;
@@ -202,256 +111,397 @@ export default function SuperAdminDashboard() {
     try {
       const { error } = await supabase.from('classes').delete().eq('id', id);
       if (error) throw error;
-      setSuccess('Class deleted!');
-      await fetchData();
+      setSuccess('Class deleted!'); await fetchData();
     } catch (err) { setError(err.message); }
+  };
+
+  // ======================== USER CREATION ========================
+
+  const createFaculty = async (e) => {
+    e.preventDefault(); clearMsg(); setLoading(true);
+    try {
+      const fakeEmail = usernameToEmail(facUsername);
+      const { data, error: signUpError } = await supabaseAdmin.auth.signUp({
+        email: fakeEmail, password: facPassword,
+        options: { data: { full_name: facName, role: 'faculty', username: facUsername.trim() } },
+      });
+      if (signUpError) throw signUpError;
+      if (data.user) {
+        await supabase.from('profiles').update({ role: 'faculty', department_id: deptId, full_name: facName, username: facUsername.trim() }).eq('id', data.user.id);
+      }
+      setSuccess('Faculty created!'); setFacName(''); setFacUsername(''); setFacPassword(''); await fetchData();
+    } catch (err) { setError(err.message); }
+    finally { setLoading(false); }
+  };
+
+  const createStudent = async (e) => {
+    e.preventDefault(); clearMsg(); setLoading(true);
+    try {
+      const fakeEmail = usernameToEmail(stuUsername);
+      const { data, error: signUpError } = await supabaseAdmin.auth.signUp({
+        email: fakeEmail, password: stuPassword,
+        options: { data: { full_name: stuName, role: 'student', username: stuUsername.trim() } },
+      });
+      if (signUpError) throw signUpError;
+      if (data.user) {
+        await supabase.from('profiles').update({ role: 'student', department_id: deptId, full_name: stuName, username: stuUsername.trim() }).eq('id', data.user.id);
+      }
+      setSuccess('Student created!'); setStuName(''); setStuUsername(''); setStuPassword(''); await fetchData();
+    } catch (err) { setError(err.message); }
+    finally { setLoading(false); }
   };
 
   const deleteFacultyAccount = async (id, username) => {
     if (!window.confirm(`Delete faculty "${username}"? This cannot be undone.`)) return;
     clearMsg();
-    try {
-      const { error } = await supabase.from('profiles').delete().eq('id', id);
-      if (error) throw error;
-      setSuccess('Faculty deleted!');
-      await fetchData();
-    } catch (err) { setError(err.message); }
+    try { const { error } = await supabase.from('profiles').delete().eq('id', id); if (error) throw error; setSuccess('Faculty deleted!'); await fetchData(); }
+    catch (err) { setError(err.message); }
   };
 
   const deleteStudentAccount = async (id, username) => {
     if (!window.confirm(`Delete student "${username}"? This cannot be undone.`)) return;
     clearMsg();
+    try { const { error } = await supabase.from('profiles').delete().eq('id', id); if (error) throw error; setSuccess('Student deleted!'); await fetchData(); }
+    catch (err) { setError(err.message); }
+  };
+
+  // ======================== ASSIGNMENTS ========================
+
+  const assignFacultyToClass = async (e) => {
+    e.preventDefault(); clearMsg();
+    if (!assignFacClassId || !assignFacId) return;
+    setLoading(true);
     try {
-      const { error } = await supabase.from('profiles').delete().eq('id', id);
+      const { error } = await supabase.from('class_faculty').insert({ class_id: assignFacClassId, faculty_id: assignFacId });
       if (error) throw error;
-      setSuccess('Student deleted!');
-      await fetchData();
+      setSuccess('Faculty assigned to class!'); setAssignFacClassId(''); setAssignFacId(''); await fetchData();
     } catch (err) { setError(err.message); }
+    finally { setLoading(false); }
+  };
+
+  const assignStudentToClass = async (e) => {
+    e.preventDefault(); clearMsg();
+    if (!assignStuClassId || !assignStuId) return;
+    setLoading(true);
+    try {
+      const { error } = await supabase.from('class_students').insert({ class_id: assignStuClassId, student_id: assignStuId });
+      if (error) throw error;
+      setSuccess('Student added to class!'); setAssignStuClassId(''); setAssignStuId(''); await fetchData();
+    } catch (err) { setError(err.message); }
+    finally { setLoading(false); }
   };
 
   const unassignFaculty = async (assignmentId) => {
     if (!window.confirm('Remove this faculty from the class?')) return;
     clearMsg();
-    try {
-      const { error } = await supabase.from('class_faculty').delete().eq('id', assignmentId);
-      if (error) throw error;
-      setSuccess('Faculty removed from class!');
-      await fetchData();
-    } catch (err) { setError(err.message); }
+    try { const { error } = await supabase.from('class_faculty').delete().eq('id', assignmentId); if (error) throw error; setSuccess('Faculty removed from class!'); await fetchData(); }
+    catch (err) { setError(err.message); }
   };
 
   const unassignStudent = async (assignmentId) => {
     if (!window.confirm('Remove this student from the class?')) return;
     clearMsg();
-    try {
-      const { error } = await supabase.from('class_students').delete().eq('id', assignmentId);
-      if (error) throw error;
-      setSuccess('Student removed from class!');
-      await fetchData();
-    } catch (err) { setError(err.message); }
+    try { const { error } = await supabase.from('class_students').delete().eq('id', assignmentId); if (error) throw error; setSuccess('Student removed from class!'); await fetchData(); }
+    catch (err) { setError(err.message); }
   };
 
-  // ---- FACULTY SECTIONS MANAGEMENT ----
+  // ======================== STUDENT SECTIONS MANAGEMENT ========================
 
-  const fetchFacultySections = useCallback(async () => {
-    if (!fieldClassId) { setFacultySections([]); return; }
+  const fetchStudentSections = useCallback(async () => {
+    if (!studentFieldClassId) { setStudentSections([]); return; }
     const { data: secData, error: secErr } = await supabase
-      .from('faculty_sections')
-      .select('*')
-      .eq('class_id', fieldClassId)
-      .order('section_order');
+      .from('student_sections').select('*').eq('class_id', studentFieldClassId).order('section_order');
     if (secErr) { setError(secErr.message); return; }
-    // Fetch fields for each section
     const sectionIds = (secData || []).map((s) => s.id);
     let fieldsData = [];
     if (sectionIds.length > 0) {
-      const { data: fData } = await supabase
-        .from('faculty_section_fields')
-        .select('*')
-        .in('section_id', sectionIds)
-        .order('field_order');
+      const { data: fData } = await supabase.from('student_section_fields').select('*').in('section_id', sectionIds).order('field_order');
       fieldsData = fData || [];
     }
-    const sections = (secData || []).map((s) => ({
-      ...s,
-      fields: fieldsData.filter((f) => f.section_id === s.id),
-    }));
-    setFacultySections(sections);
-  }, [fieldClassId]);
+    setStudentSections((secData || []).map((s) => ({ ...s, fields: fieldsData.filter((f) => f.section_id === s.id) })));
+  }, [studentFieldClassId]);
+
+  useEffect(() => { fetchStudentSections(); }, [fetchStudentSections]);
+
+  const saveStudentSection = async (sectionData) => {
+    clearMsg(); setLoading(true);
+    try {
+      const { data: sec, error: secErr } = await supabase.from('student_sections').insert({
+        class_id: studentFieldClassId, section_name: sectionData.section_name, section_order: studentSections.length, created_by: profile.id,
+      }).select().single();
+      if (secErr) throw secErr;
+      for (let i = 0; i < sectionData.fields.length; i++) {
+        const f = sectionData.fields[i];
+        const { error: fErr } = await supabase.from('student_section_fields').insert({
+          section_id: sec.id, field_name: f.field_name, field_type: f.field_type, field_options: f.field_options || [],
+          field_order: i, required: f.required || false, upload_link: f.upload_link || '',
+        });
+        if (fErr) throw fErr;
+      }
+      setSuccess('Student section created!'); await fetchStudentSections();
+    } catch (err) { setError(err.message); }
+    finally { setLoading(false); }
+  };
+
+  const deleteStudentSection = async (sectionId) => {
+    if (!window.confirm('Delete this section and all its fields?')) return;
+    clearMsg(); setLoading(true);
+    try { const { error } = await supabase.from('student_sections').delete().eq('id', sectionId); if (error) throw error; await fetchStudentSections(); }
+    catch (err) { setError(err.message); } finally { setLoading(false); }
+  };
+
+  const deleteStudentSectionField = async (fieldId) => {
+    clearMsg(); setLoading(true);
+    try { const { error } = await supabase.from('student_section_fields').delete().eq('id', fieldId); if (error) throw error; await fetchStudentSections(); }
+    catch (err) { setError(err.message); } finally { setLoading(false); }
+  };
+
+  const addStudentFieldToSection = async (sectionId, fieldData) => {
+    clearMsg(); setLoading(true);
+    try {
+      const { error } = await supabase.from('student_section_fields').insert({
+        section_id: sectionId, field_name: fieldData.field_name, field_type: fieldData.field_type,
+        field_options: fieldData.field_options || [], field_order: fieldData.field_order || 0,
+        required: fieldData.required || false, upload_link: fieldData.upload_link || '',
+      });
+      if (error) throw error;
+      setSuccess('Field added!'); await fetchStudentSections();
+    } catch (err) { setError(err.message); } finally { setLoading(false); }
+  };
+
+  // ======================== FACULTY SECTIONS MANAGEMENT ========================
+
+  const fetchFacultySections = useCallback(async () => {
+    if (!facultyFieldClassId) { setFacultySections([]); return; }
+    const { data: secData, error: secErr } = await supabase
+      .from('faculty_sections').select('*').eq('class_id', facultyFieldClassId).order('section_order');
+    if (secErr) { setError(secErr.message); return; }
+    const sectionIds = (secData || []).map((s) => s.id);
+    let fieldsData = [];
+    if (sectionIds.length > 0) {
+      const { data: fData } = await supabase.from('faculty_section_fields').select('*').in('section_id', sectionIds).order('field_order');
+      fieldsData = fData || [];
+    }
+    setFacultySections((secData || []).map((s) => ({ ...s, fields: fieldsData.filter((f) => f.section_id === s.id) })));
+  }, [facultyFieldClassId]);
 
   useEffect(() => { fetchFacultySections(); }, [fetchFacultySections]);
 
   const saveFacultySection = async (sectionData) => {
-    clearMsg();
-    setLoading(true);
+    clearMsg(); setLoading(true);
     try {
       const { data: sec, error: secErr } = await supabase.from('faculty_sections').insert({
-        class_id: fieldClassId,
-        section_name: sectionData.section_name,
-        section_order: facultySections.length,
-        created_by: profile.id,
+        class_id: facultyFieldClassId, section_name: sectionData.section_name, section_order: facultySections.length, created_by: profile.id,
       }).select().single();
       if (secErr) throw secErr;
-      // Insert fields
       for (let i = 0; i < sectionData.fields.length; i++) {
         const f = sectionData.fields[i];
         const { error: fErr } = await supabase.from('faculty_section_fields').insert({
-          section_id: sec.id,
-          field_name: f.field_name,
-          field_type: f.field_type,
-          field_options: f.field_options || [],
-          field_order: i,
-          required: f.required || false,
-          upload_link: f.upload_link || '',
+          section_id: sec.id, field_name: f.field_name, field_type: f.field_type, field_options: f.field_options || [],
+          field_order: i, required: f.required || false, upload_link: f.upload_link || '',
         });
         if (fErr) throw fErr;
       }
-      setSuccess('Faculty section created!');
-      await fetchFacultySections();
+      setSuccess('Faculty section created!'); await fetchFacultySections();
     } catch (err) { setError(err.message); }
     finally { setLoading(false); }
   };
 
   const deleteFacultySection = async (sectionId) => {
     if (!window.confirm('Delete this section and all its fields?')) return;
-    clearMsg();
-    setLoading(true);
-    try {
-      const { error } = await supabase.from('faculty_sections').delete().eq('id', sectionId);
-      if (error) throw error;
-      await fetchFacultySections();
-    } catch (err) { setError(err.message); }
-    finally { setLoading(false); }
+    clearMsg(); setLoading(true);
+    try { const { error } = await supabase.from('faculty_sections').delete().eq('id', sectionId); if (error) throw error; await fetchFacultySections(); }
+    catch (err) { setError(err.message); } finally { setLoading(false); }
   };
 
   const deleteFacultySectionField = async (fieldId) => {
-    clearMsg();
-    setLoading(true);
-    try {
-      const { error } = await supabase.from('faculty_section_fields').delete().eq('id', fieldId);
-      if (error) throw error;
-      await fetchFacultySections();
-    } catch (err) { setError(err.message); }
-    finally { setLoading(false); }
+    clearMsg(); setLoading(true);
+    try { const { error } = await supabase.from('faculty_section_fields').delete().eq('id', fieldId); if (error) throw error; await fetchFacultySections(); }
+    catch (err) { setError(err.message); } finally { setLoading(false); }
   };
 
   const addFacultyFieldToSection = async (sectionId, fieldData) => {
-    clearMsg();
-    setLoading(true);
+    clearMsg(); setLoading(true);
     try {
       const { error } = await supabase.from('faculty_section_fields').insert({
-        section_id: sectionId,
-        field_name: fieldData.field_name,
-        field_type: fieldData.field_type,
-        field_options: fieldData.field_options || [],
-        field_order: fieldData.field_order || 0,
-        required: fieldData.required || false,
-        upload_link: fieldData.upload_link || '',
+        section_id: sectionId, field_name: fieldData.field_name, field_type: fieldData.field_type,
+        field_options: fieldData.field_options || [], field_order: fieldData.field_order || 0,
+        required: fieldData.required || false, upload_link: fieldData.upload_link || '',
       });
       if (error) throw error;
-      setSuccess('Field added!');
-      await fetchFacultySections();
-    } catch (err) { setError(err.message); }
-    finally { setLoading(false); }
+      setSuccess('Field added!'); await fetchFacultySections();
+    } catch (err) { setError(err.message); } finally { setLoading(false); }
   };
 
-  // ---- EXCEL IMPORT ----
+  // ======================== VIEW DATA ========================
+
+  const fetchViewData = useCallback(async () => {
+    if (!viewClassId) {
+      setViewStudentData({ sections: [], students: [], submissions: {} });
+      setViewFacultyData({ sections: [], faculty: [], submissions: {} });
+      return;
+    }
+
+    // --- Student Data ---
+    const { data: stuSecData } = await supabase.from('student_sections').select('*').eq('class_id', viewClassId).order('section_order');
+    const stuSecs = stuSecData || [];
+    let stuFields = [];
+    if (stuSecs.length > 0) {
+      const secIds = stuSecs.map((s) => s.id);
+      const { data: fData } = await supabase.from('student_section_fields').select('*').in('section_id', secIds).order('field_order');
+      stuFields = fData || [];
+    }
+    const stuSectionsWithFields = stuSecs.map((s) => ({ ...s, fields: stuFields.filter((f) => f.section_id === s.id) }));
+
+    const { data: csData } = await supabase.from('class_students').select('student_id, profiles(id, full_name, username)').eq('class_id', viewClassId);
+    const classStudents = (csData || []).map((cs) => cs.profiles).filter(Boolean);
+
+    let stuSubmissions = {};
+    if (stuFields.length > 0) {
+      const fieldIds = stuFields.map((f) => f.id);
+      const { data: vals } = await supabase.from('student_field_values').select('*').in('field_id', fieldIds);
+      (vals || []).forEach((v) => {
+        if (!stuSubmissions[v.student_id]) stuSubmissions[v.student_id] = {};
+        stuSubmissions[v.student_id][v.field_id] = v.value;
+      });
+    }
+    setViewStudentData({ sections: stuSectionsWithFields, students: classStudents, submissions: stuSubmissions });
+
+    // --- Faculty Data ---
+    const { data: facSecData } = await supabase.from('faculty_sections').select('*').eq('class_id', viewClassId).order('section_order');
+    const facSecs = facSecData || [];
+    let facFields = [];
+    if (facSecs.length > 0) {
+      const secIds = facSecs.map((s) => s.id);
+      const { data: fData } = await supabase.from('faculty_section_fields').select('*').in('section_id', secIds).order('field_order');
+      facFields = fData || [];
+    }
+    const facSectionsWithFields = facSecs.map((s) => ({ ...s, fields: facFields.filter((f) => f.section_id === s.id) }));
+
+    const { data: cfData } = await supabase.from('class_faculty').select('faculty_id, profiles(id, full_name, username)').eq('class_id', viewClassId);
+    const classFacultyList = (cfData || []).map((cf) => cf.profiles).filter(Boolean);
+
+    let facSubmissions = {};
+    if (facFields.length > 0) {
+      const fieldIds = facFields.map((f) => f.id);
+      const { data: vals } = await supabase.from('faculty_field_values').select('*').in('field_id', fieldIds);
+      (vals || []).forEach((v) => {
+        if (!facSubmissions[v.faculty_id]) facSubmissions[v.faculty_id] = {};
+        facSubmissions[v.faculty_id][v.field_id] = v.value;
+      });
+    }
+    setViewFacultyData({ sections: facSectionsWithFields, faculty: classFacultyList, submissions: facSubmissions });
+  }, [viewClassId]);
+
+  useEffect(() => {
+    if (tab === 'view-data') fetchViewData();
+  }, [tab, fetchViewData]);
+
+  // ======================== EXPORT ========================
+
+  const exportStudentData = () => {
+    const allFields = viewStudentData.sections.flatMap((s) => s.fields);
+    if (allFields.length === 0 || viewStudentData.students.length === 0) return;
+    const rows = viewStudentData.students.map((s) => {
+      const row = { 'Full Name': s.full_name, 'Username': s.username };
+      allFields.forEach((f) => { row[f.field_name] = viewStudentData.submissions[s.id]?.[f.id] || ''; });
+      return row;
+    });
+    const ws = XLSX.utils.json_to_sheet(rows);
+    const wb = XLSX.utils.book_new();
+    const cls = classes.find((c) => c.id === viewClassId);
+    XLSX.utils.book_append_sheet(wb, ws, 'Student Data');
+    XLSX.writeFile(wb, `student_data_${cls?.name || 'class'}.xlsx`);
+  };
+
+  const exportFacultyData = () => {
+    const allFields = viewFacultyData.sections.flatMap((s) => s.fields);
+    if (allFields.length === 0 || viewFacultyData.faculty.length === 0) return;
+    const rows = viewFacultyData.faculty.map((f) => {
+      const row = { 'Full Name': f.full_name, 'Username': f.username };
+      allFields.forEach((field) => { row[field.field_name] = viewFacultyData.submissions[f.id]?.[field.id] || ''; });
+      return row;
+    });
+    const ws = XLSX.utils.json_to_sheet(rows);
+    const wb = XLSX.utils.book_new();
+    const cls = classes.find((c) => c.id === viewClassId);
+    XLSX.utils.book_append_sheet(wb, ws, 'Faculty Data');
+    XLSX.writeFile(wb, `faculty_data_${cls?.name || 'class'}.xlsx`);
+  };
+
+  // ======================== EXCEL IMPORT ========================
 
   const handleFileSelect = (e) => {
     const file = e.target.files[0];
     if (!file) return;
     setImportFileName(file.name);
     setError('');
-
     const reader = new FileReader();
     reader.onload = (evt) => {
       try {
         const wb = XLSX.read(evt.target.result, { type: 'binary' });
         const ws = wb.Sheets[wb.SheetNames[0]];
         const rows = XLSX.utils.sheet_to_json(ws, { defval: '' });
-        // Normalize column names
         const normalized = rows.map((row) => {
           const r = {};
-          Object.keys(row).forEach((k) => {
-            r[k.trim().toLowerCase()] = String(row[k]).trim();
-          });
+          Object.keys(row).forEach((k) => { r[k.trim().toLowerCase()] = String(row[k]).trim(); });
           return r;
         }).filter((r) => r.username);
-        if (normalized.length === 0) {
-          setError('No valid rows found. Excel must have "username" and "password" columns.');
-          setImportPreview([]);
-          return;
-        }
-        // Check for required columns
+        if (normalized.length === 0) { setError('No valid rows found. Excel must have "username" and "password" columns.'); setImportPreview([]); return; }
         const first = normalized[0];
-        if (!('password' in first) && !('pass' in first)) {
-          setError('Excel must have a "password" (or "pass") column.');
-          setImportPreview([]);
-          return;
-        }
+        if (!('password' in first) && !('pass' in first)) { setError('Excel must have a "password" (or "pass") column.'); setImportPreview([]); return; }
         setImportPreview(normalized.map((r) => ({
-          username: r.username,
-          password: r.password || r.pass || '',
-          full_name: r.full_name || r.fullname || r.name || '',
+          username: r.username, password: r.password || r.pass || '', full_name: r.full_name || r.fullname || r.name || '',
         })));
-      } catch (err) {
-        setError('Failed to parse Excel file: ' + err.message);
-        setImportPreview([]);
-      }
+      } catch (err) { setError('Failed to parse Excel file: ' + err.message); setImportPreview([]); }
     };
     reader.readAsBinaryString(file);
   };
 
   const handleImportStudents = async () => {
     if (!importClassId || importPreview.length === 0) return;
-    clearMsg();
-    setLoading(true);
-    let created = 0;
-    let failed = 0;
+    clearMsg(); setLoading(true);
+    let created = 0, failed = 0;
     try {
       for (const stu of importPreview) {
         try {
           if (!stu.username || !stu.password) { failed++; continue; }
           const fakeEmail = usernameToEmail(stu.username);
           const { data: signUpData, error: signUpErr } = await supabaseAdmin.auth.signUp({
-            email: fakeEmail,
-            password: stu.password,
+            email: fakeEmail, password: stu.password,
             options: { data: { full_name: stu.full_name || '', role: 'student', username: stu.username } },
           });
           if (signUpErr) { failed++; continue; }
           if (signUpData.user) {
-            await supabase.from('profiles').update({
-              role: 'student',
-              department_id: deptId,
-              full_name: stu.full_name || '',
-              username: stu.username,
-            }).eq('id', signUpData.user.id);
-            // Assign to class
-            await supabase.from('class_students').insert({
-              class_id: importClassId,
-              student_id: signUpData.user.id,
-            });
+            await supabase.from('profiles').update({ role: 'student', department_id: deptId, full_name: stu.full_name || '', username: stu.username }).eq('id', signUpData.user.id);
+            await supabase.from('class_students').insert({ class_id: importClassId, student_id: signUpData.user.id });
             created++;
           }
         } catch { failed++; }
       }
       setSuccess(`Import complete! ${created} students created${failed > 0 ? `, ${failed} failed` : ''}.`);
-      setImportPreview([]);
-      setImportFileName('');
+      setImportPreview([]); setImportFileName('');
       if (fileInputRef.current) fileInputRef.current.value = '';
       await fetchData();
     } catch (err) { setError(err.message); }
     finally { setLoading(false); }
   };
 
-  const tabs = [
+  // ======================== RENDER ========================
+
+  const tabsList = [
     { key: 'classes', label: 'Classes' },
     { key: 'faculty', label: 'Faculty' },
     { key: 'students', label: 'Students' },
     { key: 'import', label: 'Import Students' },
     { key: 'assign', label: 'Assign' },
+    { key: 'student-fields', label: 'Student Sections' },
     { key: 'faculty-fields', label: 'Faculty Sections' },
+    { key: 'view-data', label: 'View Data' },
   ];
+
+  const allViewStudentFields = viewStudentData.sections.flatMap((s) => s.fields);
+  const allViewFacultyFields = viewFacultyData.sections.flatMap((s) => s.fields);
 
   return (
     <div className="dashboard">
@@ -463,12 +513,8 @@ export default function SuperAdminDashboard() {
         {success && <div className="success-msg">{success}</div>}
 
         <div className="tabs">
-          {tabs.map((t) => (
-            <button
-              key={t.key}
-              className={`tab ${tab === t.key ? 'active' : ''}`}
-              onClick={() => { setTab(t.key); clearMsg(); }}
-            >
+          {tabsList.map((t) => (
+            <button key={t.key} className={`tab ${tab === t.key ? 'active' : ''}`} onClick={() => { setTab(t.key); clearMsg(); }}>
               {t.label}
             </button>
           ))}
@@ -479,18 +525,11 @@ export default function SuperAdminDashboard() {
           <div className="card">
             <h3>Create Class</h3>
             <form onSubmit={createClass} className="form-row">
-              <input
-                type="text"
-                placeholder="Class Name"
-                value={className}
-                onChange={(e) => setClassName(e.target.value)}
-              />
+              <input type="text" placeholder="Class Name" value={className} onChange={(e) => setClassName(e.target.value)} />
               <button className="btn" type="submit" disabled={loading}>Create</button>
             </form>
             <h4>Existing Classes ({classes.length})</h4>
-            {classes.length === 0 ? (
-              <p className="text-muted">No classes yet.</p>
-            ) : (
+            {classes.length === 0 ? <p className="text-muted">No classes yet.</p> : (
               <table className="table">
                 <thead><tr><th>Name</th><th>Created</th><th>Actions</th></tr></thead>
                 <tbody>
@@ -512,31 +551,18 @@ export default function SuperAdminDashboard() {
           <div className="card">
             <h3>Create Faculty Account</h3>
             <form onSubmit={createFaculty}>
-              <div className="form-group">
-                <label>Full Name</label>
-                <input type="text" value={facName} onChange={(e) => setFacName(e.target.value)} placeholder="Full Name" />
-              </div>
-              <div className="form-group">
-                <label>Username</label>
-                <input type="text" value={facUsername} onChange={(e) => setFacUsername(e.target.value)} placeholder="Username (used for login)" />
-              </div>
-              <div className="form-group">
-                <label>Password</label>
-                <input type="password" value={facPassword} onChange={(e) => setFacPassword(e.target.value)} placeholder="Password" />
-              </div>
+              <div className="form-group"><label>Full Name</label><input type="text" value={facName} onChange={(e) => setFacName(e.target.value)} placeholder="Full Name" /></div>
+              <div className="form-group"><label>Username</label><input type="text" value={facUsername} onChange={(e) => setFacUsername(e.target.value)} placeholder="Username (used for login)" /></div>
+              <div className="form-group"><label>Password</label><input type="password" value={facPassword} onChange={(e) => setFacPassword(e.target.value)} placeholder="Password" /></div>
               <button className="btn" type="submit" disabled={loading}>Create Faculty</button>
             </form>
             <h4>Faculty List ({faculty.length})</h4>
-            {faculty.length === 0 ? (
-              <p className="text-muted">No faculty yet.</p>
-            ) : (
+            {faculty.length === 0 ? <p className="text-muted">No faculty yet.</p> : (
               <table className="table">
                 <thead><tr><th>Name</th><th>Username</th><th>Actions</th></tr></thead>
                 <tbody>
                   {faculty.map((f) => (
-                    <tr key={f.id}>
-                      <td>{f.full_name}</td>
-                      <td>{f.username}</td>
+                    <tr key={f.id}><td>{f.full_name}</td><td>{f.username}</td>
                       <td><button className="btn btn-sm btn-danger" onClick={() => deleteFacultyAccount(f.id, f.username)}>Delete</button></td>
                     </tr>
                   ))}
@@ -551,31 +577,18 @@ export default function SuperAdminDashboard() {
           <div className="card">
             <h3>Create Student Account</h3>
             <form onSubmit={createStudent}>
-              <div className="form-group">
-                <label>Full Name</label>
-                <input type="text" value={stuName} onChange={(e) => setStuName(e.target.value)} placeholder="Full Name" />
-              </div>
-              <div className="form-group">
-                <label>Username</label>
-                <input type="text" value={stuUsername} onChange={(e) => setStuUsername(e.target.value)} placeholder="Username (used for login)" />
-              </div>
-              <div className="form-group">
-                <label>Password</label>
-                <input type="password" value={stuPassword} onChange={(e) => setStuPassword(e.target.value)} placeholder="Password" />
-              </div>
+              <div className="form-group"><label>Full Name</label><input type="text" value={stuName} onChange={(e) => setStuName(e.target.value)} placeholder="Full Name" /></div>
+              <div className="form-group"><label>Username</label><input type="text" value={stuUsername} onChange={(e) => setStuUsername(e.target.value)} placeholder="Username (used for login)" /></div>
+              <div className="form-group"><label>Password</label><input type="password" value={stuPassword} onChange={(e) => setStuPassword(e.target.value)} placeholder="Password" /></div>
               <button className="btn" type="submit" disabled={loading}>Create Student</button>
             </form>
             <h4>Student List ({students.length})</h4>
-            {students.length === 0 ? (
-              <p className="text-muted">No students yet.</p>
-            ) : (
+            {students.length === 0 ? <p className="text-muted">No students yet.</p> : (
               <table className="table">
                 <thead><tr><th>Name</th><th>Username</th><th>Actions</th></tr></thead>
                 <tbody>
                   {students.map((s) => (
-                    <tr key={s.id}>
-                      <td>{s.full_name}</td>
-                      <td>{s.username}</td>
+                    <tr key={s.id}><td>{s.full_name}</td><td>{s.username}</td>
                       <td><button className="btn btn-sm btn-danger" onClick={() => deleteStudentAccount(s.id, s.username)}>Delete</button></td>
                     </tr>
                   ))}
@@ -600,8 +613,6 @@ export default function SuperAdminDashboard() {
               </select>
               <button className="btn" type="submit" disabled={loading}>Assign</button>
             </form>
-
-            {/* Show currently assigned faculty per class */}
             {classes.map((c) => {
               const assigned = classFacultyMap[c.id] || [];
               if (assigned.length === 0) return null;
@@ -612,9 +623,7 @@ export default function SuperAdminDashboard() {
                     <thead><tr><th>Name</th><th>Username</th><th>Actions</th></tr></thead>
                     <tbody>
                       {assigned.map((a) => (
-                        <tr key={a.id}>
-                          <td>{a.profiles?.full_name}</td>
-                          <td>{a.profiles?.username}</td>
+                        <tr key={a.id}><td>{a.profiles?.full_name}</td><td>{a.profiles?.username}</td>
                           <td><button className="btn btn-sm btn-danger" onClick={() => unassignFaculty(a.id)}>Remove</button></td>
                         </tr>
                       ))}
@@ -636,8 +645,6 @@ export default function SuperAdminDashboard() {
               </select>
               <button className="btn" type="submit" disabled={loading}>Add to Class</button>
             </form>
-
-            {/* Show currently assigned students per class */}
             {classes.map((c) => {
               const assigned = classStudentMap[c.id] || [];
               if (assigned.length === 0) return null;
@@ -648,9 +655,7 @@ export default function SuperAdminDashboard() {
                     <thead><tr><th>Name</th><th>Username</th><th>Actions</th></tr></thead>
                     <tbody>
                       {assigned.map((a) => (
-                        <tr key={a.id}>
-                          <td>{a.profiles?.full_name}</td>
-                          <td>{a.profiles?.username}</td>
+                        <tr key={a.id}><td>{a.profiles?.full_name}</td><td>{a.profiles?.username}</td>
                           <td><button className="btn btn-sm btn-danger" onClick={() => unassignStudent(a.id)}>Remove</button></td>
                         </tr>
                       ))}
@@ -666,7 +671,7 @@ export default function SuperAdminDashboard() {
         {tab === 'import' && (
           <div className="card">
             <h3>Import Students from Excel</h3>
-            <p className="text-muted">Upload an Excel file (.xlsx, .xls) or CSV with columns: <strong>username</strong>, <strong>password</strong>, and optionally <strong>full_name</strong>. Each student will be created and assigned to the selected class.</p>
+            <p className="text-muted">Upload an Excel file (.xlsx, .xls) or CSV with columns: <strong>username</strong>, <strong>password</strong>, and optionally <strong>full_name</strong>.</p>
             <div className="form-group">
               <label>Select Class</label>
               <select value={importClassId} onChange={(e) => { setImportClassId(e.target.value); setImportPreview([]); setImportFileName(''); if(fileInputRef.current) fileInputRef.current.value = ''; }}>
@@ -678,47 +683,55 @@ export default function SuperAdminDashboard() {
               <>
                 <div className="form-group">
                   <label>Choose File</label>
-                  <input
-                    type="file"
-                    ref={fileInputRef}
-                    accept=".xlsx,.xls,.csv"
-                    onChange={handleFileSelect}
-                  />
+                  <input type="file" ref={fileInputRef} accept=".xlsx,.xls,.csv" onChange={handleFileSelect} />
                   {importFileName && <small className="text-muted">File: {importFileName}</small>}
                 </div>
                 {importPreview.length > 0 && (
                   <>
                     <h4>Preview ({importPreview.length} students)</h4>
                     <table className="table">
-                      <thead>
-                        <tr>
-                          <th>#</th>
-                          <th>Username</th>
-                          <th>Password</th>
-                          <th>Full Name</th>
-                        </tr>
-                      </thead>
+                      <thead><tr><th>#</th><th>Username</th><th>Password</th><th>Full Name</th></tr></thead>
                       <tbody>
                         {importPreview.map((row, i) => (
                           <tr key={i}>
-                            <td>{i + 1}</td>
-                            <td>{row.username}</td>
+                            <td>{i + 1}</td><td>{row.username}</td>
                             <td>{row.password ? '••••••' : <span style={{color:'red'}}>Missing</span>}</td>
                             <td>{row.full_name || row.username}</td>
                           </tr>
                         ))}
                       </tbody>
                     </table>
-                    <button
-                      className="btn"
-                      onClick={handleImportStudents}
-                      disabled={loading}
-                    >
+                    <button className="btn" onClick={handleImportStudents} disabled={loading}>
                       {loading ? 'Importing...' : `Import ${importPreview.length} Students`}
                     </button>
                   </>
                 )}
               </>
+            )}
+          </div>
+        )}
+
+        {/* STUDENT SECTIONS TAB */}
+        {tab === 'student-fields' && (
+          <div className="card">
+            <h3>Manage Student Sections</h3>
+            <p className="text-muted">Create sections with fields that students must fill out for each class.</p>
+            <div className="form-group">
+              <label>Select Class</label>
+              <select value={studentFieldClassId} onChange={(e) => { setStudentFieldClassId(e.target.value); clearMsg(); }}>
+                <option value="">-- Select Class --</option>
+                {classes.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
+              </select>
+            </div>
+            {studentFieldClassId && (
+              <FormBuilder
+                sections={studentSections}
+                onSaveSection={saveStudentSection}
+                onDeleteSection={deleteStudentSection}
+                onDeleteField={deleteStudentSectionField}
+                onAddField={addStudentFieldToSection}
+                loading={loading}
+              />
             )}
           </div>
         )}
@@ -730,12 +743,12 @@ export default function SuperAdminDashboard() {
             <p className="text-muted">Create sections with fields that faculty members must fill out for each class.</p>
             <div className="form-group">
               <label>Select Class</label>
-              <select value={fieldClassId} onChange={(e) => { setFieldClassId(e.target.value); clearMsg(); }}>
+              <select value={facultyFieldClassId} onChange={(e) => { setFacultyFieldClassId(e.target.value); clearMsg(); }}>
                 <option value="">-- Select Class --</option>
                 {classes.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
               </select>
             </div>
-            {fieldClassId && (
+            {facultyFieldClassId && (
               <FormBuilder
                 sections={facultySections}
                 onSaveSection={saveFacultySection}
@@ -744,6 +757,97 @@ export default function SuperAdminDashboard() {
                 onAddField={addFacultyFieldToSection}
                 loading={loading}
               />
+            )}
+          </div>
+        )}
+
+        {/* VIEW DATA TAB */}
+        {tab === 'view-data' && (
+          <div className="card">
+            <h3>View Collected Data</h3>
+            <p className="text-muted">Select a class to view student and faculty data. You can export to Excel.</p>
+            <div className="form-group">
+              <label>Select Class</label>
+              <select value={viewClassId} onChange={(e) => { setViewClassId(e.target.value); clearMsg(); }}>
+                <option value="">-- Select Class --</option>
+                {classes.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
+              </select>
+            </div>
+
+            {viewClassId && (
+              <>
+                {/* Student Data */}
+                <div style={{ marginTop: '1.5rem' }}>
+                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '0.75rem' }}>
+                    <h3 style={{ margin: 0 }}>Student Data</h3>
+                    {allViewStudentFields.length > 0 && viewStudentData.students.length > 0 && (
+                      <button className="btn btn-sm" onClick={exportStudentData}>Export to Excel</button>
+                    )}
+                  </div>
+                  {viewStudentData.students.length === 0 ? (
+                    <p className="text-muted">No students in this class.</p>
+                  ) : allViewStudentFields.length === 0 ? (
+                    <p className="text-muted">No student sections/fields created for this class yet.</p>
+                  ) : (
+                    <div className="table-responsive">
+                      <table className="table">
+                        <thead>
+                          <tr>
+                            <th>Full Name</th><th>Username</th>
+                            {allViewStudentFields.map((f) => <th key={f.id}>{f.field_name}</th>)}
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {viewStudentData.students.map((s) => (
+                            <tr key={s.id}>
+                              <td>{s.full_name}</td><td>{s.username}</td>
+                              {allViewStudentFields.map((f) => (
+                                <td key={f.id}>{viewStudentData.submissions[s.id]?.[f.id] || '-'}</td>
+                              ))}
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+                  )}
+                </div>
+
+                {/* Faculty Data */}
+                <div style={{ marginTop: '2rem' }}>
+                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '0.75rem' }}>
+                    <h3 style={{ margin: 0 }}>Faculty Data</h3>
+                    {allViewFacultyFields.length > 0 && viewFacultyData.faculty.length > 0 && (
+                      <button className="btn btn-sm" onClick={exportFacultyData}>Export to Excel</button>
+                    )}
+                  </div>
+                  {viewFacultyData.faculty.length === 0 ? (
+                    <p className="text-muted">No faculty assigned to this class.</p>
+                  ) : allViewFacultyFields.length === 0 ? (
+                    <p className="text-muted">No faculty sections/fields created for this class yet.</p>
+                  ) : (
+                    <div className="table-responsive">
+                      <table className="table">
+                        <thead>
+                          <tr>
+                            <th>Full Name</th><th>Username</th>
+                            {allViewFacultyFields.map((f) => <th key={f.id}>{f.field_name}</th>)}
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {viewFacultyData.faculty.map((f) => (
+                            <tr key={f.id}>
+                              <td>{f.full_name}</td><td>{f.username}</td>
+                              {allViewFacultyFields.map((field) => (
+                                <td key={field.id}>{viewFacultyData.submissions[f.id]?.[field.id] || '-'}</td>
+                              ))}
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+                  )}
+                </div>
+              </>
             )}
           </div>
         )}

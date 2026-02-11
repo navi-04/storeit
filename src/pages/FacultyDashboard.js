@@ -2,12 +2,11 @@ import React, { useEffect, useState, useCallback } from 'react';
 import { supabase } from '../supabaseClient';
 import { useAuth } from '../context/AuthContext';
 import Navbar from '../components/Navbar';
-import FormBuilder from '../components/FormBuilder';
 import FieldRenderer from '../components/FieldRenderer';
 
 export default function FacultyDashboard() {
   const { user } = useAuth();
-  const [tab, setTab] = useState('student-fields');
+  const [tab, setTab] = useState('faculty-fields');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
   const [success, setSuccess] = useState('');
@@ -15,9 +14,9 @@ export default function FacultyDashboard() {
   const [assignedClasses, setAssignedClasses] = useState([]);
   const [selectedClassId, setSelectedClassId] = useState('');
 
-  // Student sections (faculty creates these)
+  // Student sections (created by super admin, faculty views student data)
   const [studentSections, setStudentSections] = useState([]);
-  // Faculty sections (super admin creates these, faculty fills values)
+  // Faculty sections (created by super admin, faculty fills values)
   const [facultySections, setFacultySections] = useState([]);
   const [facultyFieldValues, setFacultyFieldValues] = useState({});
 
@@ -39,7 +38,7 @@ export default function FacultyDashboard() {
     }
   }, [user, selectedClassId]);
 
-  // ──── STUDENT SECTIONS (faculty creates for students to fill) ────
+  // ──── STUDENT SECTIONS (read-only, created by super admin) ────
   const fetchStudentSections = useCallback(async () => {
     if (!selectedClassId) return;
     const { data: secData, error: secErr } = await supabase
@@ -58,88 +57,11 @@ export default function FacultyDashboard() {
       .in('section_id', sectionIds)
       .order('field_order');
 
-    const result = sections.map((sec) => ({
+    setStudentSections(sections.map((sec) => ({
       ...sec,
       fields: (fieldData || []).filter((f) => f.section_id === sec.id),
-    }));
-    setStudentSections(result);
+    })));
   }, [selectedClassId]);
-
-  const saveStudentSection = async (sectionData) => {
-    setLoading(true);
-    try {
-      const { data: sec, error: secErr } = await supabase
-        .from('student_sections')
-        .insert({
-          class_id: selectedClassId,
-          section_name: sectionData.section_name,
-          section_order: studentSections.length,
-          created_by: user.id,
-        })
-        .select()
-        .single();
-      if (secErr) throw secErr;
-
-      for (let i = 0; i < sectionData.fields.length; i++) {
-        const f = sectionData.fields[i];
-        const { error: fErr } = await supabase
-          .from('student_section_fields')
-          .insert({
-            section_id: sec.id,
-            field_name: f.field_name,
-            field_type: f.field_type,
-            field_options: f.field_options || [],
-            field_order: i,
-            required: f.required || false,
-            upload_link: f.upload_link || '',
-          });
-        if (fErr) throw fErr;
-      }
-      setSuccess('Section created!');
-      await fetchStudentSections();
-    } catch (err) { setError(err.message); }
-    finally { setLoading(false); }
-  };
-
-  const deleteStudentSection = async (sectionId) => {
-    setLoading(true);
-    try {
-      const { error } = await supabase.from('student_sections').delete().eq('id', sectionId);
-      if (error) throw error;
-      await fetchStudentSections();
-    } catch (err) { setError(err.message); }
-    finally { setLoading(false); }
-  };
-
-  const deleteStudentSectionField = async (fieldId) => {
-    setLoading(true);
-    try {
-      const { error } = await supabase.from('student_section_fields').delete().eq('id', fieldId);
-      if (error) throw error;
-      await fetchStudentSections();
-    } catch (err) { setError(err.message); }
-    finally { setLoading(false); }
-  };
-
-  const addStudentFieldToSection = async (sectionId, fieldData) => {
-    setLoading(true);
-    try {
-      const sec = studentSections.find((s) => s.id === sectionId);
-      const { error } = await supabase.from('student_section_fields').insert({
-        section_id: sectionId,
-        field_name: fieldData.field_name,
-        field_type: fieldData.field_type,
-        field_options: fieldData.field_options || [],
-        field_order: sec ? sec.fields.length : 0,
-        required: fieldData.required || false,
-        upload_link: fieldData.upload_link || '',
-      });
-      if (error) throw error;
-      setSuccess('Field added!');
-      await fetchStudentSections();
-    } catch (err) { setError(err.message); }
-    finally { setLoading(false); }
-  };
 
   // ──── FACULTY SECTIONS (super admin creates, faculty fills values) ────
   const fetchFacultySections = useCallback(async () => {
@@ -184,6 +106,7 @@ export default function FacultyDashboard() {
 
   const saveFacultyFieldValues = async () => {
     setLoading(true);
+    setError(''); setSuccess('');
     try {
       const allFields = facultySections.flatMap((s) => s.fields);
       for (const field of allFields) {
@@ -244,8 +167,7 @@ export default function FacultyDashboard() {
   const allStudentFields = studentSections.flatMap((s) => s.fields);
 
   const tabs = [
-    { key: 'student-fields', label: 'Student Sections' },
-    { key: 'faculty-fields', label: 'Faculty Fields' },
+    { key: 'faculty-fields', label: 'My Details' },
     { key: 'view-students', label: 'View Students' },
   ];
 
@@ -288,24 +210,12 @@ export default function FacultyDashboard() {
               ))}
             </div>
 
-            {/* Student Sections Tab (faculty creates sections for students) */}
-            {tab === 'student-fields' && (
-              <FormBuilder
-                sections={studentSections}
-                onSaveSection={saveStudentSection}
-                onDeleteSection={deleteStudentSection}
-                onDeleteField={deleteStudentSectionField}
-                onAddField={addStudentFieldToSection}
-                loading={loading}
-              />
-            )}
-
             {/* Faculty Fields Tab — sections created by Super Admin, faculty fills values */}
             {tab === 'faculty-fields' && (
               <div className="card">
                 <h3>Your Faculty Details</h3>
                 {facultySections.length === 0 ? (
-                  <p className="text-muted">No faculty sections created for this class yet. Ask your Super Admin to add sections.</p>
+                  <p className="text-muted">No faculty sections created for this class yet. Please contact your administrator.</p>
                 ) : (
                   <>
                     <FieldRenderer
@@ -328,7 +238,7 @@ export default function FacultyDashboard() {
                 {classStudents.length === 0 ? (
                   <p className="text-muted">No students in this class.</p>
                 ) : allStudentFields.length === 0 ? (
-                  <p className="text-muted">No student sections/fields created yet.</p>
+                  <p className="text-muted">No student sections/fields created yet. Please contact your administrator.</p>
                 ) : (
                   <div className="table-responsive">
                     <table className="table">

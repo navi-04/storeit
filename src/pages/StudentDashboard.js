@@ -145,7 +145,7 @@ export default function StudentDashboard() {
             <div className="card">
               <h3>Your Details</h3>
               {sections.length === 0 ? (
-                <p className="text-muted">No sections created by your faculty yet.</p>
+                <p className="text-muted">No sections created by your administrator yet.</p>
               ) : (
                 <>
                   <FieldRenderer

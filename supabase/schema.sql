@@ -490,13 +490,12 @@ with check (
   and class_id in (select id from public.classes where department_id = public.get_my_department())
 );
 
--- Faculty manage sections in assigned classes
-create policy "faculty_student_sections_all"
+-- Faculty read sections in assigned classes (super admin creates them)
+create policy "faculty_student_sections_read"
 on public.student_sections
-for all
+for select
 to authenticated
-using (public.faculty_owns_class(class_id))
-with check (public.faculty_owns_class(class_id));
+using (public.faculty_owns_class(class_id));
 
 -- Students read sections of their class
 create policy "student_student_sections_read"
@@ -538,18 +537,12 @@ with check (
   )
 );
 
--- Faculty manage fields in sections of their classes
-create policy "faculty_student_section_fields_all"
+-- Faculty read fields in sections of their classes (super admin creates them)
+create policy "faculty_student_section_fields_read"
 on public.student_section_fields
-for all
+for select
 to authenticated
 using (
-  section_id in (
-    select ss.id from public.student_sections ss
-    where public.faculty_owns_class(ss.class_id)
-  )
-)
-with check (
   section_id in (
     select ss.id from public.student_sections ss
     where public.faculty_owns_class(ss.class_id)
