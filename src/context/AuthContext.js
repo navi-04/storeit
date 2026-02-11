@@ -1,5 +1,7 @@
+
 import React, { createContext, useCallback, useContext, useEffect, useState } from 'react';
 import { supabase, supabaseConfigError } from '../supabaseClient';
+
 import { getLoginEmailCandidates, usernameToEmail } from '../utils/authEmail';
 
 const AuthContext = createContext({});
@@ -19,6 +21,7 @@ export function AuthProvider({ children }) {
     const { data, error } = await supabase
       .from('profiles')
       .select('*')
+
       .eq('id', authUser.id)
       .maybeSingle();
 
@@ -32,6 +35,7 @@ export function AuthProvider({ children }) {
         'No profile row found for authenticated user. Ensure handle_new_user trigger + RLS policies are configured in Supabase schema.'
       );
       return null;
+
     }
 
     return data;
@@ -59,6 +63,7 @@ export function AuthProvider({ children }) {
       return null;
     }
   }, [fetchProfile]);
+
 
   useEffect(() => {
     if (!supabase) {
