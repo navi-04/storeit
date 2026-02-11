@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { supabase } from '../supabaseClient';
+import { usernameToEmail } from '../utils/authEmail';
 import Navbar from '../components/Navbar';
 
 export default function OrgAdminDashboard() {
@@ -60,7 +61,7 @@ export default function OrgAdminDashboard() {
     setSuccess('');
     try {
       // Sign up the user with metadata
-      const fakeEmail = `${saForm.username.toLowerCase().trim()}@storeit.app`;
+      const fakeEmail = usernameToEmail(saForm.username);
       const { data: signUpData, error: signUpError } = await supabase.auth.signUp({
         email: fakeEmail,
         password: saForm.password,
