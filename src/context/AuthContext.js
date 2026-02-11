@@ -1,5 +1,6 @@
 import React, { createContext, useContext, useEffect, useState } from 'react';
 import { supabase } from '../supabaseClient';
+import { getLoginEmailCandidates, usernameToEmail } from '../utils/authEmail';
 
 const AuthContext = createContext({});
 
@@ -16,31 +17,20 @@ export function AuthProvider({ children }) {
       .from('profiles')
       .select('*')
       .eq('id', userId)
-      .single();
+      .maybeSingle();
+
     if (error) {
       console.error('Error fetching profile:', error);
-      // Profile missing — trigger may not have fired (e.g. user created via Dashboard).
-      // Auto-create profile from auth user metadata.
-      const meta = authUser.user_metadata || {};
-      const email = authUser.email || '';
-      const username = meta.username || email.split('@')[0] || userId.slice(0, 8);
-      const { data: inserted, error: insertErr } = await supabase
-        .from('profiles')
-        .upsert({
-          id: userId,
-          username,
-          email,
-          full_name: meta.full_name || '',
-          role: meta.role || 'student',
-        }, { onConflict: 'id' })
-        .select()
-        .single();
-      if (insertErr) {
-        console.error('Error creating profile:', insertErr);
-        return null;
-      }
-      return inserted;
+      return null;
     }
+
+    if (!data) {
+      console.warn(
+        'No profile row found for authenticated user. Ensure handle_new_user trigger + RLS policies are configured in Supabase schema.'
+      );
+      return null;
+    }
+
     return data;
   };
 
@@ -73,13 +63,26 @@ export function AuthProvider({ children }) {
     return () => subscription.unsubscribe();
   }, []);
 
-  const toEmail = (username) => `${username.toLowerCase().trim()}@storeit.app`;
+  const signIn = async (usernameOrEmail, password) => {
+    const emailCandidates = getLoginEmailCandidates(usernameOrEmail);
+    if (emailCandidates.length === 0) {
+      throw new Error('Please enter a valid username or email.');
+    }
 
-  const signIn = async (username, password) => {
-    const email = toEmail(username);
-    const { data, error } = await supabase.auth.signInWithPassword({ email, password });
-    if (error) throw error;
-    return data;
+    let lastError = null;
+    for (const email of emailCandidates) {
+      const { data, error } = await supabase.auth.signInWithPassword({ email, password });
+      if (!error) return data;
+
+      lastError = error;
+      // If this is not a credentials problem, fail fast to surface the real issue
+      const msg = (error.message || '').toLowerCase();
+      if (!msg.includes('invalid login credentials')) {
+        throw error;
+      }
+    }
+
+    throw lastError || new Error('Login failed');
   };
 
   const signOut = async () => {
@@ -89,7 +92,7 @@ export function AuthProvider({ children }) {
   };
 
   const signUp = async (username, password, metadata = {}) => {
-    const email = toEmail(username);
+    const email = usernameToEmail(username);
     const { data, error } = await supabase.auth.signUp({
       email,
       password,
@@ -108,7 +111,7 @@ export function AuthProvider({ children }) {
     signUp,
     refreshProfile: async () => {
       if (user) {
-        const p = await fetchProfile(user.id);
+        const p = await fetchProfile(user);
         setProfile(p);
       }
     },
