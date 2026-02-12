@@ -1,4 +1,4 @@
-import React, { createContext, useCallback, useContext, useEffect, useState } from 'react';
+import React, { createContext, useCallback, useContext, useEffect, useState, useMemo } from 'react';
 import { supabase, supabaseConfigError } from '../supabaseClient';
 import { getLoginEmailCandidates, usernameToEmail } from '../utils/authEmail';
 
@@ -156,7 +156,7 @@ export function AuthProvider({ children }) {
     };
   }, [fetchProfileWithTimeout]);
 
-  const signIn = async (usernameOrEmail, password) => {
+  const signIn = useCallback(async (usernameOrEmail, password) => {
     if (!supabase) throw new Error(supabaseConfigError || 'Supabase is not configured.');
 
     setAuthError('');
@@ -179,18 +179,18 @@ export function AuthProvider({ children }) {
     }
 
     throw lastError || new Error('Login failed');
-  };
+  }, []);
 
-  const signOut = async () => {
+  const signOut = useCallback(async () => {
     if (!supabase) return;
 
     await supabase.auth.signOut();
     setUser(null);
     setProfile(null);
     setAuthError('');
-  };
+  }, []);
 
-  const signUp = async (username, password, metadata = {}) => {
+  const signUp = useCallback(async (username, password, metadata = {}) => {
     if (!supabase) throw new Error(supabaseConfigError || 'Supabase is not configured.');
 
     const email = usernameToEmail(username);
@@ -201,9 +201,16 @@ export function AuthProvider({ children }) {
     });
     if (error) throw error;
     return data;
-  };
+  }, []);
 
-  const value = {
+  const refreshProfile = useCallback(async () => {
+    if (user) {
+      const p = await fetchProfile(user);
+      setProfile(p);
+    }
+  }, [user, fetchProfile]);
+
+  const value = useMemo(() => ({
     user,
     profile,
     loading,
@@ -212,13 +219,8 @@ export function AuthProvider({ children }) {
     signIn,
     signOut,
     signUp,
-    refreshProfile: async () => {
-      if (user) {
-        const p = await fetchProfile(user);
-        setProfile(p);
-      }
-    },
-  };
+    refreshProfile,
+  }), [user, profile, loading, authError, signIn, signOut, signUp, refreshProfile]);
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
 }
