@@ -703,3 +703,47 @@ body {
 .password-toggle-btn:active {
   transform: scale(0.95);
 }
+
+/* ---------- Footer ---------- */
+.app-footer {
+  background: var(--card-bg);
+  border-top: 1px solid var(--border);
+  padding: 1.5rem 2rem;
+  margin-top: 3rem;
+  text-align: center;
+}
+
+.footer-content {
+  max-width: 1200px;
+  margin: 0 auto;
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  font-size: 0.875rem;
+  color: var(--text-muted);
+}
+
+.footer-copyright,
+.footer-author {
+  line-height: 1.5;
+}
+
+.footer-content a {
+  color: var(--primary);
+  text-decoration: none;
+  font-weight: 500;
+  transition: color 0.2s ease;
+}
+
+.footer-content a:hover {
+  color: var(--primary-hover);
+  text-decoration: underline;
+}
+
+@media (min-width: 768px) {
+  .footer-content {
+    flex-direction: row;
+    justify-content: space-between;
+    align-items: center;
+  }
+}

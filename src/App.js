@@ -7,6 +7,7 @@ import OrgAdminDashboard from './pages/OrgAdminDashboard';
 import SuperAdminDashboard from './pages/SuperAdminDashboard';
 import FacultyDashboard from './pages/FacultyDashboard';
 import StudentDashboard from './pages/StudentDashboard';
+import Footer from './components/Footer';
 import './App.css';
 
 function RoleRedirect() {
@@ -73,6 +74,7 @@ function App() {
 
           <Route path="*" element={<Navigate to="/" replace />} />
         </Routes>
+        <Footer />
       </AuthProvider>
     </HashRouter>
   );
