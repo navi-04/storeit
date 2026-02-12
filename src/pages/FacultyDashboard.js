@@ -109,7 +109,34 @@ export default function FacultyDashboard() {
     setError(''); setSuccess('');
     try {
       const allFields = facultySections.flatMap((s) => s.fields);
+      
+      if (allFields.length === 0) {
+        setError('No fields to save. Please refresh the page.');
+        setLoading(false);
+        return;
+      }
+
+      // First verify all fields exist in the database
+      const fieldIds = allFields.map(f => f.id);
+      const { data: existingFields, error: checkError } = await supabase
+        .from('faculty_section_fields')
+        .select('id')
+        .in('id', fieldIds);
+      
+      if (checkError) throw checkError;
+      
+      const existingFieldIds = new Set((existingFields || []).map(f => f.id));
+      
+      // Only save values for fields that exist
+      let savedCount = 0;
+      let skippedCount = 0;
+      
       for (const field of allFields) {
+        if (!existingFieldIds.has(field.id)) {
+          skippedCount++;
+          continue;
+        }
+        
         const value = facultyFieldValues[field.id] || '';
         const { error } = await supabase
           .from('faculty_field_values')
@@ -118,10 +145,25 @@ export default function FacultyDashboard() {
             faculty_id: user.id,
             value,
           }, { onConflict: 'field_id,faculty_id' });
-        if (error) throw error;
+        
+        if (error) {
+          console.error(`Error saving field ${field.id}:`, error);
+          skippedCount++;
+        } else {
+          savedCount++;
+        }
       }
-      setSuccess('Faculty details saved!');
-    } catch (err) { setError(err.message); }
+      
+      if (skippedCount > 0) {
+        setSuccess(`Faculty details saved! (${savedCount} fields saved, ${skippedCount} fields skipped due to errors)`);
+        // Refresh the sections to get current state
+        await fetchFacultySections();
+      } else {
+        setSuccess('Faculty details saved successfully!');
+      }
+    } catch (err) { 
+      setError(`Error saving: ${err.message}. Please refresh the page and try again.`); 
+    }
     finally { setLoading(false); }
   };
 
@@ -163,6 +205,18 @@ export default function FacultyDashboard() {
   }, [tab, fetchStudentSubmissions]);
 
   const clearMsg = () => { setError(''); setSuccess(''); };
+
+  const handleRefresh = async () => {
+    clearMsg();
+    setLoading(true);
+    await fetchStudentSections();
+    await fetchFacultySections();
+    if (tab === 'view-students') {
+      await fetchStudentSubmissions();
+    }
+    setSuccess('Page refreshed successfully!');
+    setLoading(false);
+  };
 
   const allStudentFields = studentSections.flatMap((s) => s.fields);
 
@@ -213,7 +267,17 @@ export default function FacultyDashboard() {
             {/* Faculty Fields Tab — sections created by Super Admin, faculty fills values */}
             {tab === 'faculty-fields' && (
               <div className="card">
-                <h3>Your Faculty Details</h3>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1rem' }}>
+                  <h3 style={{ margin: 0 }}>Your Faculty Details</h3>
+                  <button 
+                    className="btn btn-sm" 
+                    onClick={handleRefresh}
+                    disabled={loading}
+                    title="Refresh to get latest form fields"
+                  >
+                    {loading ? 'Refreshing...' : '🔄 Refresh'}
+                  </button>
+                </div>
                 {facultySections.length === 0 ? (
                   <p className="text-muted">No faculty sections created for this class yet. Please contact your administrator.</p>
                 ) : (
@@ -223,9 +287,23 @@ export default function FacultyDashboard() {
                       values={facultyFieldValues}
                       onChange={setFacultyFieldValues}
                     />
-                    <button className="btn" onClick={saveFacultyFieldValues} disabled={loading} style={{ marginTop: '1rem' }}>
-                      {loading ? 'Saving...' : 'Save Faculty Details'}
-                    </button>
+                    <div style={{ marginTop: '1rem', display: 'flex', gap: '0.5rem' }}>
+                      <button 
+                        className="btn" 
+                        onClick={saveFacultyFieldValues} 
+                        disabled={loading}
+                      >
+                        {loading ? 'Saving...' : 'Save Faculty Details'}
+                      </button>
+                      <button
+                        className="btn btn-outline"
+                        onClick={handleRefresh}
+                        disabled={loading}
+                        style={{ background: '#6b7280', color: 'white' }}
+                      >
+                        {loading ? 'Refreshing...' : 'Refresh Form'}
+                      </button>
+                    </div>
                   </>
                 )}
               </div>

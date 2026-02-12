@@ -18,6 +18,9 @@ export default function SuperAdminDashboard() {
   const [faculty, setFaculty] = useState([]);
   const [students, setStudents] = useState([]);
 
+  // Store created credentials temporarily
+  const [createdUsers, setCreatedUsers] = useState({});
+
   // Forms
   const [className, setClassName] = useState('');
   const [facName, setFacName] = useState('');
@@ -26,6 +29,18 @@ export default function SuperAdminDashboard() {
   const [stuName, setStuName] = useState('');
   const [stuUsername, setStuUsername] = useState('');
   const [stuPassword, setStuPassword] = useState('');
+
+  // Edit modals
+  const [editingClass, setEditingClass] = useState(null);
+  const [editingFaculty, setEditingFaculty] = useState(null);
+  const [editingStudent, setEditingStudent] = useState(null);
+
+  // Password visibility
+  const [visiblePasswords, setVisiblePasswords] = useState({});
+
+  const togglePasswordVisibility = (userId) => {
+    setVisiblePasswords(prev => ({ ...prev, [userId]: !prev[userId] }));
+  };
 
   // Assign forms
   const [assignFacClassId, setAssignFacClassId] = useState('');
@@ -115,6 +130,18 @@ export default function SuperAdminDashboard() {
     } catch (err) { setError(err.message); }
   };
 
+  const updateClass = async (e) => {
+    e.preventDefault(); clearMsg();
+    if (!editingClass?.name.trim()) return;
+    setLoading(true);
+    try {
+      const { error } = await supabase.from('classes').update({ name: editingClass.name.trim() }).eq('id', editingClass.id);
+      if (error) throw error;
+      setSuccess('Class updated!'); setEditingClass(null); await fetchData();
+    } catch (err) { setError(err.message); }
+    finally { setLoading(false); }
+  };
+
   // ======================== USER CREATION ========================
 
   const createFaculty = async (e) => {
@@ -128,6 +155,8 @@ export default function SuperAdminDashboard() {
       if (signUpError) throw signUpError;
       if (data.user) {
         await supabase.from('profiles').update({ role: 'faculty', department_id: deptId, full_name: facName, username: facUsername.trim() }).eq('id', data.user.id);
+        // Store credentials temporarily
+        setCreatedUsers(prev => ({ ...prev, [data.user.id]: { username: facUsername, password: facPassword, type: 'faculty' } }));
       }
       setSuccess('Faculty created!'); setFacName(''); setFacUsername(''); setFacPassword(''); await fetchData();
     } catch (err) { setError(err.message); }
@@ -145,6 +174,8 @@ export default function SuperAdminDashboard() {
       if (signUpError) throw signUpError;
       if (data.user) {
         await supabase.from('profiles').update({ role: 'student', department_id: deptId, full_name: stuName, username: stuUsername.trim() }).eq('id', data.user.id);
+        // Store credentials temporarily
+        setCreatedUsers(prev => ({ ...prev, [data.user.id]: { username: stuUsername, password: stuPassword, type: 'student' } }));
       }
       setSuccess('Student created!'); setStuName(''); setStuUsername(''); setStuPassword(''); await fetchData();
     } catch (err) { setError(err.message); }
@@ -154,15 +185,59 @@ export default function SuperAdminDashboard() {
   const deleteFacultyAccount = async (id, username) => {
     if (!window.confirm(`Delete faculty "${username}"? This cannot be undone.`)) return;
     clearMsg();
-    try { const { error } = await supabase.from('profiles').delete().eq('id', id); if (error) throw error; setSuccess('Faculty deleted!'); await fetchData(); }
+    try { 
+      const { error } = await supabase.from('profiles').delete().eq('id', id); 
+      if (error) throw error; 
+      // Remove from created users
+      setCreatedUsers(prev => {
+        const newUsers = { ...prev };
+        delete newUsers[id];
+        return newUsers;
+      });
+      setSuccess('Faculty deleted!'); await fetchData(); 
+    }
     catch (err) { setError(err.message); }
+  };
+
+  const updateFaculty = async (e) => {
+    e.preventDefault(); clearMsg(); setLoading(true);
+    try {
+      const { error } = await supabase.from('profiles')
+        .update({ full_name: editingFaculty.full_name, username: editingFaculty.username })
+        .eq('id', editingFaculty.id);
+      if (error) throw error;
+      setSuccess('Faculty updated!'); setEditingFaculty(null); await fetchData();
+    } catch (err) { setError(err.message); }
+    finally { setLoading(false); }
   };
 
   const deleteStudentAccount = async (id, username) => {
     if (!window.confirm(`Delete student "${username}"? This cannot be undone.`)) return;
     clearMsg();
-    try { const { error } = await supabase.from('profiles').delete().eq('id', id); if (error) throw error; setSuccess('Student deleted!'); await fetchData(); }
+    try { 
+      const { error } = await supabase.from('profiles').delete().eq('id', id); 
+      if (error) throw error; 
+      // Remove from created users
+      setCreatedUsers(prev => {
+        const newUsers = { ...prev };
+        delete newUsers[id];
+        return newUsers;
+      });
+      setSuccess('Student deleted!'); await fetchData(); 
+    }
     catch (err) { setError(err.message); }
+  };
+
+  const updateStudent = async (e) => {
+    e.preventDefault(); clearMsg(); setLoading(true);
+    try {
+      const { error } = await supabase.from('profiles')
+        .update({ full_name: editingStudent.full_name, username: editingStudent.username })
+        .eq('id', editingStudent.id);
+      if (error) throw error;
+      setSuccess('Student updated!'); setEditingStudent(null); await fetchData();
+    } catch (err) { setError(err.message); }
+    finally { setLoading(false); }
   };
 
   // ======================== ASSIGNMENTS ========================
@@ -475,6 +550,8 @@ export default function SuperAdminDashboard() {
           if (signUpData.user) {
             await supabase.from('profiles').update({ role: 'student', department_id: deptId, full_name: stu.full_name || '', username: stu.username }).eq('id', signUpData.user.id);
             await supabase.from('class_students').insert({ class_id: importClassId, student_id: signUpData.user.id });
+            // Store credentials temporarily
+            setCreatedUsers(prev => ({ ...prev, [signUpData.user.id]: { username: stu.username, password: stu.password, type: 'student' } }));
             created++;
           }
         } catch { failed++; }
@@ -537,7 +614,10 @@ export default function SuperAdminDashboard() {
                     <tr key={c.id}>
                       <td>{c.name}</td>
                       <td>{new Date(c.created_at).toLocaleDateString()}</td>
-                      <td><button className="btn btn-sm btn-danger" onClick={() => deleteClass(c.id, c.name)}>Delete</button></td>
+                      <td>
+                        <button className="btn btn-sm" onClick={() => setEditingClass(c)} style={{ marginRight: '0.5rem' }}>Edit</button>
+                        <button className="btn btn-sm btn-danger" onClick={() => deleteClass(c.id, c.name)}>Delete</button>
+                      </td>
                     </tr>
                   ))}
                 </tbody>
@@ -559,11 +639,34 @@ export default function SuperAdminDashboard() {
             <h4>Faculty List ({faculty.length})</h4>
             {faculty.length === 0 ? <p className="text-muted">No faculty yet.</p> : (
               <table className="table">
-                <thead><tr><th>Name</th><th>Username</th><th>Actions</th></tr></thead>
+                <thead><tr><th>Name</th><th>Username</th><th>Password</th><th>Actions</th></tr></thead>
                 <tbody>
                   {faculty.map((f) => (
-                    <tr key={f.id}><td>{f.full_name}</td><td>{f.username}</td>
-                      <td><button className="btn btn-sm btn-danger" onClick={() => deleteFacultyAccount(f.id, f.username)}>Delete</button></td>
+                    <tr key={f.id}>
+                      <td>{f.full_name}</td>
+                      <td>{f.username}</td>
+                      <td>
+                        {createdUsers[f.id] ? (
+                          <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                            <span style={{ color: '#059669', fontFamily: 'monospace', fontWeight: 'bold' }}>
+                              {visiblePasswords[f.id] ? createdUsers[f.id].password : '••••••••'}
+                            </span>
+                            <button
+                              onClick={() => togglePasswordVisibility(f.id)}
+                              className="password-toggle-btn"
+                              title={visiblePasswords[f.id] ? 'Hide password' : 'Show password'}
+                            >
+                              {visiblePasswords[f.id] ? '🙈' : '👁️'}
+                            </button>
+                          </div>
+                        ) : (
+                          <span className="text-muted">••••••••</span>
+                        )}
+                      </td>
+                      <td>
+                        <button className="btn btn-sm" onClick={() => setEditingFaculty(f)} style={{ marginRight: '0.5rem' }}>Edit</button>
+                        <button className="btn btn-sm btn-danger" onClick={() => deleteFacultyAccount(f.id, f.username)}>Delete</button>
+                      </td>
                     </tr>
                   ))}
                 </tbody>
@@ -585,11 +688,34 @@ export default function SuperAdminDashboard() {
             <h4>Student List ({students.length})</h4>
             {students.length === 0 ? <p className="text-muted">No students yet.</p> : (
               <table className="table">
-                <thead><tr><th>Name</th><th>Username</th><th>Actions</th></tr></thead>
+                <thead><tr><th>Name</th><th>Username</th><th>Password</th><th>Actions</th></tr></thead>
                 <tbody>
                   {students.map((s) => (
-                    <tr key={s.id}><td>{s.full_name}</td><td>{s.username}</td>
-                      <td><button className="btn btn-sm btn-danger" onClick={() => deleteStudentAccount(s.id, s.username)}>Delete</button></td>
+                    <tr key={s.id}>
+                      <td>{s.full_name}</td>
+                      <td>{s.username}</td>
+                      <td>
+                        {createdUsers[s.id] ? (
+                          <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                            <span style={{ color: '#059669', fontFamily: 'monospace', fontWeight: 'bold' }}>
+                              {visiblePasswords[s.id] ? createdUsers[s.id].password : '••••••••'}
+                            </span>
+                            <button
+                              onClick={() => togglePasswordVisibility(s.id)}
+                              className="password-toggle-btn"
+                              title={visiblePasswords[s.id] ? 'Hide password' : 'Show password'}
+                            >
+                              {visiblePasswords[s.id] ? '🙈' : '👁️'}
+                            </button>
+                          </div>
+                        ) : (
+                          <span className="text-muted">••••••••</span>
+                        )}
+                      </td>
+                      <td>
+                        <button className="btn btn-sm" onClick={() => setEditingStudent(s)} style={{ marginRight: '0.5rem' }}>Edit</button>
+                        <button className="btn btn-sm btn-danger" onClick={() => deleteStudentAccount(s.id, s.username)}>Delete</button>
+                      </td>
                     </tr>
                   ))}
                 </tbody>
@@ -852,6 +978,128 @@ export default function SuperAdminDashboard() {
           </div>
         )}
       </div>
+
+      {/* Edit Class Modal */}
+      {editingClass && (
+        <div className="modal-overlay" onClick={() => setEditingClass(null)}>
+          <div className="modal-content" onClick={(e) => e.stopPropagation()}>
+            <h3>Edit Class</h3>
+            <form onSubmit={updateClass}>
+              <div className="form-group">
+                <label>Class Name</label>
+                <input
+                  type="text"
+                  value={editingClass.name}
+                  onChange={(e) => setEditingClass({ ...editingClass, name: e.target.value })}
+                  placeholder="Class Name"
+                  required
+                />
+              </div>
+              <div style={{ display: 'flex', gap: '0.5rem', marginTop: '1rem' }}>
+                <button className="btn" type="submit" disabled={loading}>
+                  {loading ? 'Updating...' : 'Update'}
+                </button>
+                <button
+                  className="btn btn-outline"
+                  type="button"
+                  onClick={() => setEditingClass(null)}
+                  style={{ background: '#6b7280', color: 'white' }}
+                >
+                  Cancel
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* Edit Faculty Modal */}
+      {editingFaculty && (
+        <div className="modal-overlay" onClick={() => setEditingFaculty(null)}>
+          <div className="modal-content" onClick={(e) => e.stopPropagation()}>
+            <h3>Edit Faculty</h3>
+            <form onSubmit={updateFaculty}>
+              <div className="form-group">
+                <label>Full Name</label>
+                <input
+                  type="text"
+                  value={editingFaculty.full_name}
+                  onChange={(e) => setEditingFaculty({ ...editingFaculty, full_name: e.target.value })}
+                  placeholder="Full Name"
+                  required
+                />
+              </div>
+              <div className="form-group">
+                <label>Username</label>
+                <input
+                  type="text"
+                  value={editingFaculty.username}
+                  onChange={(e) => setEditingFaculty({ ...editingFaculty, username: e.target.value })}
+                  placeholder="Username"
+                  required
+                />
+              </div>
+              <div style={{ display: 'flex', gap: '0.5rem', marginTop: '1rem' }}>
+                <button className="btn" type="submit" disabled={loading}>
+                  {loading ? 'Updating...' : 'Update'}
+                </button>
+                <button
+                  className="btn btn-outline"
+                  type="button"
+                  onClick={() => setEditingFaculty(null)}
+                  style={{ background: '#6b7280', color: 'white' }}
+                >
+                  Cancel
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* Edit Student Modal */}
+      {editingStudent && (
+        <div className="modal-overlay" onClick={() => setEditingStudent(null)}>
+          <div className="modal-content" onClick={(e) => e.stopPropagation()}>
+            <h3>Edit Student</h3>
+            <form onSubmit={updateStudent}>
+              <div className="form-group">
+                <label>Full Name</label>
+                <input
+                  type="text"
+                  value={editingStudent.full_name}
+                  onChange={(e) => setEditingStudent({ ...editingStudent, full_name: e.target.value })}
+                  placeholder="Full Name"
+                  required
+                />
+              </div>
+              <div className="form-group">
+                <label>Username</label>
+                <input
+                  type="text"
+                  value={editingStudent.username}
+                  onChange={(e) => setEditingStudent({ ...editingStudent, username: e.target.value })}
+                  placeholder="Username"
+                  required
+                />
+              </div>
+              <div style={{ display: 'flex', gap: '0.5rem', marginTop: '1rem' }}>
+                <button className="btn" type="submit" disabled={loading}>
+                  {loading ? 'Updating...' : 'Update'}
+                </button>
+                <button
+                  className="btn btn-outline"
+                  type="button"
+                  onClick={() => setEditingStudent(null)}
+                  style={{ background: '#6b7280', color: 'white' }}
+                >
+                  Cancel
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
