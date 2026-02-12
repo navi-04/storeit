@@ -1,4 +1,4 @@
-import React, { useEffect, useState, useCallback, useRef } from 'react';
+import React, { useEffect, useState, useCallback, useRef, useMemo } from 'react';
 import { supabase, supabaseAdmin } from '../supabaseClient';
 import { usernameToEmail } from '../utils/authEmail';
 import { useAuth } from '../context/AuthContext';
@@ -6,7 +6,7 @@ import Navbar from '../components/Navbar';
 import FormBuilder from '../components/FormBuilder';
 import * as XLSX from 'xlsx';
 
-export default function SuperAdminDashboard() {
+export function SuperAdminDashboard() {
   const { profile } = useAuth();
   const [tab, setTab] = useState('classes');
   const [loading, setLoading] = useState(false);
@@ -64,7 +64,8 @@ export default function SuperAdminDashboard() {
   const [viewStudentData, setViewStudentData] = useState({ sections: [], students: [], submissions: {} });
   const [viewFacultyData, setViewFacultyData] = useState({ sections: [], faculty: [], submissions: {} });
 
-  const deptId = profile?.department_id;
+  // Memoize deptId to prevent unnecessary re-renders
+  const deptId = useMemo(() => profile?.department_id, [profile?.department_id]);
 
   const fetchData = useCallback(async () => {
     if (!deptId) return;
@@ -1078,3 +1079,5 @@ export default function SuperAdminDashboard() {
     </div>
   );
 }
+
+export default SuperAdminDashboard;
