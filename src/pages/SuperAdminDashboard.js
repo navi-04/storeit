@@ -10,6 +10,7 @@ export function SuperAdminDashboard() {
   const { profile } = useAuth();
   const [tab, setTab] = useState('classes');
   const [loading, setLoading] = useState(false);
+  const [dataLoading, setDataLoading] = useState(false);
   const [error, setError] = useState('');
   const [success, setSuccess] = useState('');
 
@@ -76,6 +77,7 @@ export function SuperAdminDashboard() {
 
   const fetchData = useCallback(async () => {
     if (!deptId) return;
+    setDataLoading(true);
     // Silent background refresh - no loading state to avoid UI flicker
     const [classRes, facRes, stuRes] = await Promise.all([
       supabase.from('classes').select('*').eq('department_id', deptId).order('created_at'),
@@ -102,6 +104,7 @@ export function SuperAdminDashboard() {
       csMap[cs.class_id].push(cs);
     });
     setClassStudentMap(csMap);
+    setDataLoading(false);
   }, [deptId]);
 
   // Only fetch once on mount or when deptId changes
@@ -598,7 +601,14 @@ export function SuperAdminDashboard() {
     <div className="dashboard">
       <Navbar />
       <div className="container">
-        <h2>Super Admin Dashboard</h2>
+        <div style={{ position: 'relative' }}>
+          <h2>Super Admin Dashboard</h2>
+          {dataLoading && (
+            <div className="loading-indicator" title="Loading data...">
+              <div className="spinner"></div>
+            </div>
+          )}
+        </div>
 
         {error && <div className="error-msg">{error}</div>}
         {success && <div className="success-msg">{success}</div>}

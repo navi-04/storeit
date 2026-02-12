@@ -7,6 +7,7 @@ import FieldRenderer from '../components/FieldRenderer';
 export default function StudentDashboard() {
   const { user } = useAuth();
   const [loading, setLoading] = useState(true);
+  const [dataLoading, setDataLoading] = useState(false);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
   const [success, setSuccess] = useState('');
@@ -181,13 +182,18 @@ export default function StudentDashboard() {
     <div className="dashboard">
       <Navbar />
       <div className="container">
-        <h2>Student Dashboard</h2>
+        <div style={{ position: 'relative' }}>
+          <h2>Student Dashboard</h2>
+        </div>
 
         {error && <div className="error-msg">{error}</div>}
         {success && <div className="success-msg">{success}</div>}
 
         {loading ? (
-          <p>Loading...</p>
+          <div className="card" style={{ textAlign: 'center', padding: '3rem' }}>
+            <div className="spinner" style={{ margin: '0 auto 1rem' }}></div>
+            <p style={{ color: 'var(--text-muted)' }}>Loading your dashboard...</p>
+          </div>
         ) : !assignedClass ? (
           <div className="card">
             <p className="text-muted">You have not been assigned to any class yet. Please contact your administrator.</p>

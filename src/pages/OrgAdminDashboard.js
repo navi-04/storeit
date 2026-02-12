@@ -8,6 +8,7 @@ export default function OrgAdminDashboard() {
   const [departments, setDepartments] = useState([]);
   const [deptName, setDeptName] = useState('');
   const [deptLoading, setDeptLoading] = useState(false);
+  const [dataLoading, setDataLoading] = useState(false);
 
   // --- Super Admins ---
   const [superAdmins, setSuperAdmins] = useState([]);
@@ -37,19 +38,23 @@ export default function OrgAdminDashboard() {
   }, []);
 
   const loadDepartments = async () => {
+    setDataLoading(true);
     const { data, error } = await supabase.from('departments').select('*').order('created_at');
-    if (error) { setError(error.message); return; }
+    if (error) { setError(error.message); setDataLoading(false); return; }
     setDepartments(data || []);
+    setDataLoading(false);
   };
 
   const loadSuperAdmins = async () => {
+    setDataLoading(true);
     const { data, error } = await supabase
       .from('profiles')
       .select('*, departments(name)')
       .eq('role', 'super_admin')
       .order('created_at');
-    if (error) { setError(error.message); return; }
+    if (error) { setError(error.message); setDataLoading(false); return; }
     setSuperAdmins(data || []);
+    setDataLoading(false);
   };
 
   const createDepartment = async (e) => {
@@ -235,7 +240,14 @@ export default function OrgAdminDashboard() {
     <div className="dashboard">
       <Navbar />
       <div className="container">
-        <h2>Org Admin Dashboard</h2>
+        <div style={{ position: 'relative' }}>
+          <h2>Org Admin Dashboard</h2>
+          {dataLoading && (
+            <div className="loading-indicator" title="Loading data...">
+              <div className="spinner"></div>
+            </div>
+          )}
+        </div>
 
         {error && <div className="error-msg">{error}</div>}
         {success && <div className="success-msg">{success}</div>}

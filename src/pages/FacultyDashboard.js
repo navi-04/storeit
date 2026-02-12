@@ -8,6 +8,7 @@ export default function FacultyDashboard() {
   const { user } = useAuth();
   const [tab, setTab] = useState('faculty-fields');
   const [loading, setLoading] = useState(false);
+  const [dataLoading, setDataLoading] = useState(false);
   const [error, setError] = useState('');
   const [success, setSuccess] = useState('');
 
@@ -26,15 +27,17 @@ export default function FacultyDashboard() {
 
   const fetchAssignedClasses = useCallback(async () => {
     if (!user?.id) return;
+    setDataLoading(true);
     const { data, error } = await supabase
       .from('class_faculty')
       .select('class_id, classes(id, name)')
       .eq('faculty_id', user.id);
-    if (error) { setError(error.message); return; }
+    if (error) { setError(error.message); setDataLoading(false); return; }
     const cls = (data || []).map((cf) => cf.classes).filter(Boolean);
     setAssignedClasses(cls);
     // Only set initial class if none selected
     setSelectedClassId(prev => prev || (cls.length > 0 ? cls[0].id : ''));
+    setDataLoading(false);
   }, [user?.id]);
 
   // ──── STUDENT SECTIONS (read-only, created by super admin) ────
@@ -240,7 +243,14 @@ export default function FacultyDashboard() {
     <div className="dashboard">
       <Navbar />
       <div className="container">
-        <h2>Faculty Dashboard</h2>
+        <div style={{ position: 'relative' }}>
+          <h2>Faculty Dashboard</h2>
+          {dataLoading && (
+            <div className="loading-indicator" title="Loading data...">
+              <div className="spinner"></div>
+            </div>
+          )}
+        </div>
 
         {error && <div className="error-msg">{error}</div>}
         {success && <div className="success-msg">{success}</div>}
