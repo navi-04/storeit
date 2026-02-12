@@ -137,6 +137,8 @@ export default function OrgAdminDashboard() {
         if (profileError) throw profileError;
         // Store credentials temporarily
         setCreatedSuperAdmins(prev => ({ ...prev, [signUpData.user.id]: { username: saForm.username, password: saForm.password } }));
+        // Auto-show password for newly created super admin
+        setVisiblePasswords(prev => ({ ...prev, [signUpData.user.id]: true }));
       }
 
       setSuccess('Super Admin created!');

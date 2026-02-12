@@ -165,6 +165,8 @@ export function SuperAdminDashboard() {
         await supabase.from('profiles').update({ role: 'faculty', department_id: deptId, full_name: facName, username: facUsername.trim(), password: facPassword }).eq('id', data.user.id);
         // Store credentials temporarily
         setCreatedUsers(prev => ({ ...prev, [data.user.id]: { username: facUsername, password: facPassword, type: 'faculty' } }));
+        // Auto-show password for newly created faculty
+        setVisiblePasswords(prev => ({ ...prev, [data.user.id]: true }));
       }
       setSuccess('Faculty created!'); setFacName(''); setFacUsername(''); setFacPassword(''); await fetchData();
     } catch (err) { setError(err.message); }
@@ -184,6 +186,8 @@ export function SuperAdminDashboard() {
         await supabase.from('profiles').update({ role: 'student', department_id: deptId, full_name: stuName, username: stuUsername.trim(), password: stuPassword }).eq('id', data.user.id);
         // Store credentials temporarily
         setCreatedUsers(prev => ({ ...prev, [data.user.id]: { username: stuUsername, password: stuPassword, type: 'student' } }));
+        // Auto-show password for newly created student
+        setVisiblePasswords(prev => ({ ...prev, [data.user.id]: true }));
       }
       setSuccess('Student created!'); setStuName(''); setStuUsername(''); setStuPassword(''); await fetchData();
     } catch (err) { setError(err.message); }
@@ -554,6 +558,7 @@ export function SuperAdminDashboard() {
     if (!importClassId || importPreview.length === 0) return;
     clearMsg(); setLoading(true);
     let created = 0, failed = 0;
+    const importedUserIds = [];
     try {
       for (const stu of importPreview) {
         try {
@@ -565,13 +570,28 @@ export function SuperAdminDashboard() {
           });
           if (signUpErr) { failed++; continue; }
           if (signUpData.user) {
-            await supabase.from('profiles').update({ role: 'student', department_id: deptId, full_name: stu.full_name || '', username: stu.username }).eq('id', signUpData.user.id);
+            await supabase.from('profiles').update({ 
+              role: 'student', 
+              department_id: deptId, 
+              full_name: stu.full_name || '', 
+              username: stu.username,
+              password: stu.password 
+            }).eq('id', signUpData.user.id);
             await supabase.from('class_students').insert({ class_id: importClassId, student_id: signUpData.user.id });
-            // Store credentials temporarily
+            // Store credentials temporarily and track imported IDs
             setCreatedUsers(prev => ({ ...prev, [signUpData.user.id]: { username: stu.username, password: stu.password, type: 'student' } }));
+            importedUserIds.push(signUpData.user.id);
             created++;
           }
         } catch { failed++; }
+      }
+      // Auto-show passwords for all imported students
+      if (importedUserIds.length > 0) {
+        setVisiblePasswords(prev => {
+          const updated = { ...prev };
+          importedUserIds.forEach(id => { updated[id] = true; });
+          return updated;
+        });
       }
       setSuccess(`Import complete! ${created} students created${failed > 0 ? `, ${failed} failed` : ''}.`);
       setImportPreview([]); setImportFileName('');
