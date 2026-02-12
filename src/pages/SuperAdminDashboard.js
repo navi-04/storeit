@@ -76,6 +76,7 @@ export function SuperAdminDashboard() {
 
   const fetchData = useCallback(async () => {
     if (!deptId) return;
+    // Silent background refresh - no loading state to avoid UI flicker
     const [classRes, facRes, stuRes] = await Promise.all([
       supabase.from('classes').select('*').eq('department_id', deptId).order('created_at'),
       supabase.from('profiles').select('*').eq('department_id', deptId).eq('role', 'faculty').order('created_at'),
@@ -103,7 +104,10 @@ export function SuperAdminDashboard() {
     setClassStudentMap(csMap);
   }, [deptId]);
 
-  useEffect(() => { fetchData(); }, [fetchData]);
+  // Only fetch once on mount or when deptId changes
+  useEffect(() => { 
+    if (deptId) fetchData(); 
+  }, [deptId, fetchData]);
 
   const clearMsg = () => { setError(''); setSuccess(''); };
 
@@ -285,6 +289,7 @@ export function SuperAdminDashboard() {
 
   const fetchStudentSections = useCallback(async () => {
     if (!studentFieldClassId) { setStudentSections([]); return; }
+    // Silent background refresh
     const { data: secData, error: secErr } = await supabase
       .from('student_sections').select('*').eq('class_id', studentFieldClassId).order('section_order');
     if (secErr) { setError(secErr.message); return; }
@@ -297,7 +302,9 @@ export function SuperAdminDashboard() {
     setStudentSections((secData || []).map((s) => ({ ...s, fields: fieldsData.filter((f) => f.section_id === s.id) })));
   }, [studentFieldClassId]);
 
-  useEffect(() => { fetchStudentSections(); }, [fetchStudentSections]);
+  useEffect(() => { 
+    fetchStudentSections(); 
+  }, [studentFieldClassId, fetchStudentSections]);
 
   const saveStudentSection = async (sectionData) => {
     clearMsg(); setLoading(true);
@@ -349,6 +356,7 @@ export function SuperAdminDashboard() {
 
   const fetchFacultySections = useCallback(async () => {
     if (!facultyFieldClassId) { setFacultySections([]); return; }
+    // Silent background refresh
     const { data: secData, error: secErr } = await supabase
       .from('faculty_sections').select('*').eq('class_id', facultyFieldClassId).order('section_order');
     if (secErr) { setError(secErr.message); return; }
@@ -361,7 +369,9 @@ export function SuperAdminDashboard() {
     setFacultySections((secData || []).map((s) => ({ ...s, fields: fieldsData.filter((f) => f.section_id === s.id) })));
   }, [facultyFieldClassId]);
 
-  useEffect(() => { fetchFacultySections(); }, [fetchFacultySections]);
+  useEffect(() => { 
+    fetchFacultySections(); 
+  }, [facultyFieldClassId, fetchFacultySections]);
 
   const saveFacultySection = async (sectionData) => {
     clearMsg(); setLoading(true);
@@ -469,9 +479,12 @@ export function SuperAdminDashboard() {
     setViewFacultyData({ sections: facSectionsWithFields, faculty: classFacultyList, submissions: facSubmissions });
   }, [viewClassId]);
 
+  // Only fetch view data when tab changes to 'view-data' or viewClassId changes
   useEffect(() => {
-    if (tab === 'view-data') fetchViewData();
-  }, [tab, fetchViewData]);
+    if (tab === 'view-data' && viewClassId) {
+      fetchViewData();
+    }
+  }, [tab, viewClassId, fetchViewData]);
 
   // ======================== EXPORT ========================
 
