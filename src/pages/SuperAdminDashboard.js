@@ -35,6 +35,13 @@ export function SuperAdminDashboard() {
   const [editingFaculty, setEditingFaculty] = useState(null);
   const [editingStudent, setEditingStudent] = useState(null);
 
+  // Password visibility
+  const [visiblePasswords, setVisiblePasswords] = useState({});
+
+  const togglePasswordVisibility = (userId) => {
+    setVisiblePasswords(prev => ({ ...prev, [userId]: !prev[userId] }));
+  };
+
   // Assign forms
   const [assignFacClassId, setAssignFacClassId] = useState('');
   const [assignFacId, setAssignFacId] = useState('');
@@ -641,9 +648,18 @@ export function SuperAdminDashboard() {
                       <td>{f.username}</td>
                       <td>
                         {f.password || createdUsers[f.id] ? (
-                          <span style={{ color: '#059669', fontFamily: 'monospace', fontWeight: 'bold' }}>
-                            {f.password || createdUsers[f.id]?.password}
-                          </span>
+                          <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                            <span style={{ color: '#059669', fontFamily: 'monospace', fontWeight: 'bold' }}>
+                              {visiblePasswords[f.id] ? (f.password || createdUsers[f.id]?.password) : '••••••••'}
+                            </span>
+                            <button
+                              onClick={() => togglePasswordVisibility(f.id)}
+                              className="password-toggle-btn"
+                              title={visiblePasswords[f.id] ? 'Hide password' : 'Show password'}
+                            >
+                              {visiblePasswords[f.id] ? '🙈' : '👁️'}
+                            </button>
+                          </div>
                         ) : (
                           <span className="text-muted">••••••••</span>
                         )}
@@ -681,9 +697,18 @@ export function SuperAdminDashboard() {
                       <td>{s.username}</td>
                       <td>
                         {s.password || createdUsers[s.id] ? (
-                          <span style={{ color: '#059669', fontFamily: 'monospace', fontWeight: 'bold' }}>
-                            {s.password || createdUsers[s.id]?.password}
-                          </span>
+                          <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                            <span style={{ color: '#059669', fontFamily: 'monospace', fontWeight: 'bold' }}>
+                              {visiblePasswords[s.id] ? (s.password || createdUsers[s.id]?.password) : '••••••••'}
+                            </span>
+                            <button
+                              onClick={() => togglePasswordVisibility(s.id)}
+                              className="password-toggle-btn"
+                              title={visiblePasswords[s.id] ? 'Hide password' : 'Show password'}
+                            >
+                              {visiblePasswords[s.id] ? '🙈' : '👁️'}
+                            </button>
+                          </div>
                         ) : (
                           <span className="text-muted">••••••••</span>
                         )}
