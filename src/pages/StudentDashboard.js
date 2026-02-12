@@ -17,7 +17,7 @@ export default function StudentDashboard() {
 
   // Auto-detect the single class this student belongs to
   const fetchAssignedClass = useCallback(async () => {
-    if (!user) return;
+    if (!user?.id) return;
     setLoading(true);
     try {
       const { data, error } = await supabase
@@ -41,11 +41,11 @@ export default function StudentDashboard() {
     } finally {
       setLoading(false);
     }
-  }, [user]);
+  }, [user?.id]);
 
   // Fetch sections + fields + student's values
   const fetchSectionsAndValues = useCallback(async () => {
-    if (!assignedClass || !user) return;
+    if (!assignedClass?.id || !user?.id) return;
     setLoading(true);
     try {
       const { data: secData, error: secErr } = await supabase
@@ -99,7 +99,7 @@ export default function StudentDashboard() {
     } finally {
       setLoading(false);
     }
-  }, [assignedClass, user]);
+  }, [assignedClass?.id, user?.id]);
 
   useEffect(() => { fetchAssignedClass(); }, [fetchAssignedClass]);
   useEffect(() => { fetchSectionsAndValues(); }, [fetchSectionsAndValues]);
