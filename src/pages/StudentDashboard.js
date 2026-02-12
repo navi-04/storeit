@@ -47,10 +47,6 @@ export default function StudentDashboard() {
   const fetchSectionsAndValues = useCallback(async () => {
     if (!assignedClass || !user) return;
     setLoading(true);
-    
-    console.log('Fetching sections for class:', assignedClass.id);
-    console.log('Current user:', user);
-    
     try {
       const { data: secData, error: secErr } = await supabase
         .from('student_sections')
@@ -59,11 +55,8 @@ export default function StudentDashboard() {
         .order('section_order');
       if (secErr) throw secErr;
 
-      console.log('Sections found:', secData);
-
       const secs = secData || [];
       if (secs.length === 0) { 
-        console.log('No sections found');
         setSections([]); 
         setValues({}); 
         setLoading(false); 
@@ -78,8 +71,6 @@ export default function StudentDashboard() {
         .order('field_order');
       if (fErr) throw fErr;
 
-      console.log('Fields found:', fieldData);
-
       const result = secs.map((sec) => ({
         ...sec,
         fields: (fieldData || []).filter((f) => f.section_id === sec.id),
@@ -88,32 +79,22 @@ export default function StudentDashboard() {
 
       // Fetch student's values
       const allFieldIds = (fieldData || []).map((f) => f.id);
-      console.log('Looking for values for field IDs:', allFieldIds);
-      
       if (allFieldIds.length > 0) {
-        const { data: valData, error: valErr } = await supabase
+        const { data: valData } = await supabase
           .from('student_field_values')
           .select('*')
           .in('field_id', allFieldIds)
           .eq('student_id', user.id);
         
-        if (valErr) {
-          console.error('Error fetching values:', valErr);
-        }
-        
-        console.log('Values found in DB:', valData);
-        
         const valMap = {};
         (valData || []).forEach((v) => { 
           valMap[v.field_id] = v.value;
-          console.log(`Loaded value for field ${v.field_id}:`, v.value);
         });
         setValues(valMap);
       } else {
         setValues({});
       }
     } catch (err) {
-      console.error('Error in fetchSectionsAndValues:', err);
       setError(err.message);
     } finally {
       setLoading(false);
@@ -136,15 +117,8 @@ export default function StudentDashboard() {
     setError('');
     setSuccess('');
     setSaving(true);
-    
-    console.log('Starting save process...');
-    console.log('Current values:', values);
-    console.log('User ID:', user?.id);
-    
     try {
       const allFields = sections.flatMap((s) => s.fields);
-      
-      console.log('All fields:', allFields);
       
       if (allFields.length === 0) {
         setError('No fields to save. Please refresh the page.');
@@ -159,31 +133,22 @@ export default function StudentDashboard() {
         .select('id')
         .in('id', fieldIds);
       
-      if (checkError) {
-        console.error('Error checking fields:', checkError);
-        throw checkError;
-      }
-      
-      console.log('Existing fields in DB:', existingFields);
+      if (checkError) throw checkError;
       
       const existingFieldIds = new Set((existingFields || []).map(f => f.id));
       
       // Only save values for fields that exist
       let savedCount = 0;
       let skippedCount = 0;
-      let errors = [];
       
       for (const field of allFields) {
         if (!existingFieldIds.has(field.id)) {
-          console.log(`Skipping field ${field.id} - does not exist in DB`);
           skippedCount++;
           continue;
         }
         
         const value = values[field.id] || '';
-        console.log(`Saving field ${field.id} (${field.field_name}):`, value);
-        
-        const { data, error } = await supabase
+        const { error } = await supabase
           .from('student_field_values')
           .upsert({
             field_id: field.id,
@@ -193,30 +158,19 @@ export default function StudentDashboard() {
         
         if (error) {
           console.error(`Error saving field ${field.id}:`, error);
-          errors.push({ field: field.field_name, error: error.message });
           skippedCount++;
         } else {
-          console.log(`Successfully saved field ${field.id}`, data);
           savedCount++;
         }
       }
       
-      if (errors.length > 0) {
-        console.error('Errors during save:', errors);
-        setError(`Some fields failed to save: ${errors.map(e => e.field).join(', ')}. Error: ${errors[0].error}`);
-      }
-      
       if (skippedCount > 0) {
         setSuccess(`Details saved! (${savedCount} fields saved, ${skippedCount} fields skipped due to errors)`);
-        // Refresh the sections to get current state
         await fetchSectionsAndValues();
       } else {
-        setSuccess(`All details saved successfully! (${savedCount} fields saved)`);
-        // Refresh to confirm data was saved
-        await fetchSectionsAndValues();
+        setSuccess('All details saved successfully!');
       }
     } catch (err) {
-      console.error('Error in handleSubmit:', err);
       setError(`Error saving: ${err.message}. Please refresh the page and try again.`);
     } finally {
       setSaving(false);
@@ -283,25 +237,6 @@ export default function StudentDashboard() {
                       {loading ? 'Refreshing...' : 'Refresh Form'}
                     </button>
                   </div>
-                  
-                  {/* Debug info - shows what data will be saved */}
-                  <details style={{ marginTop: '1rem', padding: '1rem', backgroundColor: '#f3f4f6', borderRadius: '4px' }}>
-                    <summary style={{ cursor: 'pointer', fontWeight: 'bold', marginBottom: '0.5rem' }}>
-                      🔍 Debug Info (click to expand)
-                    </summary>
-                    <div style={{ fontSize: '0.85rem', fontFamily: 'monospace', marginTop: '0.5rem' }}>
-                      <p><strong>Total fields:</strong> {sections.flatMap(s => s.fields).length}</p>
-                      <p><strong>Filled fields:</strong> {Object.keys(values).filter(k => values[k]).length}</p>
-                      <p><strong>User ID:</strong> {user?.id || 'Not found'}</p>
-                      <p><strong>Class ID:</strong> {assignedClass?.id || 'Not found'}</p>
-                      <div style={{ marginTop: '0.5rem', maxHeight: '200px', overflow: 'auto' }}>
-                        <strong>Current values:</strong>
-                        <pre style={{ fontSize: '0.75rem', whiteSpace: 'pre-wrap', wordBreak: 'break-word' }}>
-                          {JSON.stringify(values, null, 2)}
-                        </pre>
-                      </div>
-                    </div>
-                  </details>
                 </>
               )}
             </div>

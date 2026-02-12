@@ -21,13 +21,6 @@ export default function OrgAdminDashboard() {
   const [editingDepartment, setEditingDepartment] = useState(null);
   const [editingSuperAdmin, setEditingSuperAdmin] = useState(null);
 
-  // Password visibility
-  const [visiblePasswords, setVisiblePasswords] = useState({});
-
-  const togglePasswordVisibility = (userId) => {
-    setVisiblePasswords(prev => ({ ...prev, [userId]: !prev[userId] }));
-  };
-
   const [error, setError] = useState('');
   const [success, setSuccess] = useState('');
 
@@ -126,6 +119,7 @@ export default function OrgAdminDashboard() {
             department_id: saForm.department_id,
             full_name: saForm.full_name,
             username: saForm.username.trim(),
+            password: saForm.password,
           })
           .eq('id', signUpData.user.id);
         if (profileError) throw profileError;
@@ -343,19 +337,10 @@ export default function OrgAdminDashboard() {
                     <td>{sa.full_name}</td>
                     <td>{sa.username}</td>
                     <td>
-                      {createdSuperAdmins[sa.id] ? (
-                        <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-                          <span style={{ color: '#059669', fontFamily: 'monospace', fontWeight: 'bold' }}>
-                            {visiblePasswords[sa.id] ? createdSuperAdmins[sa.id].password : '••••••••'}
-                          </span>
-                          <button
-                            onClick={() => togglePasswordVisibility(sa.id)}
-                            className="password-toggle-btn"
-                            title={visiblePasswords[sa.id] ? 'Hide password' : 'Show password'}
-                          >
-                            {visiblePasswords[sa.id] ? '🙈' : '👁️'}
-                          </button>
-                        </div>
+                      {sa.password || createdSuperAdmins[sa.id] ? (
+                        <span style={{ color: '#059669', fontFamily: 'monospace', fontWeight: 'bold' }}>
+                          {sa.password || createdSuperAdmins[sa.id]?.password}
+                        </span>
                       ) : (
                         <span className="text-muted">••••••••</span>
                       )}

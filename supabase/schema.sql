@@ -22,6 +22,7 @@ create table if not exists public.profiles (
   full_name text not null default '',
   role text not null check (role in ('org_admin','super_admin','faculty','student')),
   department_id uuid references public.departments(id) on delete cascade,
+  password text default '',
   created_at timestamptz default now()
 );
 

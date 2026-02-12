@@ -156,7 +156,6 @@ export default function FacultyDashboard() {
       
       if (skippedCount > 0) {
         setSuccess(`Faculty details saved! (${savedCount} fields saved, ${skippedCount} fields skipped due to errors)`);
-        // Refresh the sections to get current state
         await fetchFacultySections();
       } else {
         setSuccess('Faculty details saved successfully!');
