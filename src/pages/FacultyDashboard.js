@@ -25,7 +25,7 @@ export default function FacultyDashboard() {
   const [studentSubmissions, setStudentSubmissions] = useState({});
 
   const fetchAssignedClasses = useCallback(async () => {
-    if (!user) return;
+    if (!user?.id) return;
     const { data, error } = await supabase
       .from('class_faculty')
       .select('class_id, classes(id, name)')
@@ -33,10 +33,9 @@ export default function FacultyDashboard() {
     if (error) { setError(error.message); return; }
     const cls = (data || []).map((cf) => cf.classes).filter(Boolean);
     setAssignedClasses(cls);
-    if (cls.length > 0 && !selectedClassId) {
-      setSelectedClassId(cls[0].id);
-    }
-  }, [user, selectedClassId]);
+    // Only set initial class if none selected
+    setSelectedClassId(prev => prev || (cls.length > 0 ? cls[0].id : ''));
+  }, [user?.id]);
 
   // ──── STUDENT SECTIONS (read-only, created by super admin) ────
   const fetchStudentSections = useCallback(async () => {
@@ -65,7 +64,7 @@ export default function FacultyDashboard() {
 
   // ──── FACULTY SECTIONS (super admin creates, faculty fills values) ────
   const fetchFacultySections = useCallback(async () => {
-    if (!selectedClassId || !user) return;
+    if (!selectedClassId || !user?.id) return;
     const { data: secData, error: secErr } = await supabase
       .from('faculty_sections')
       .select('*')
@@ -102,7 +101,7 @@ export default function FacultyDashboard() {
     } else {
       setFacultyFieldValues({});
     }
-  }, [selectedClassId, user]);
+  }, [selectedClassId, user?.id]);
 
   const saveFacultyFieldValues = async () => {
     setLoading(true);
@@ -176,21 +175,34 @@ export default function FacultyDashboard() {
     const studs = (csData || []).map((cs) => cs.profiles).filter(Boolean);
     setClassStudents(studs);
 
-    const allFields = studentSections.flatMap((s) => s.fields);
-    if (allFields.length > 0) {
-      const fieldIds = allFields.map((f) => f.id);
-      const { data: vals } = await supabase
-        .from('student_field_values')
-        .select('*')
-        .in('field_id', fieldIds);
-      const grouped = {};
-      (vals || []).forEach((v) => {
-        if (!grouped[v.student_id]) grouped[v.student_id] = {};
-        grouped[v.student_id][v.field_id] = v.value;
-      });
-      setStudentSubmissions(grouped);
+    // Fetch student sections and fields to get field IDs
+    const { data: secData } = await supabase
+      .from('student_sections')
+      .select('id')
+      .eq('class_id', selectedClassId);
+    
+    if (secData && secData.length > 0) {
+      const sectionIds = secData.map(s => s.id);
+      const { data: fieldData } = await supabase
+        .from('student_section_fields')
+        .select('id')
+        .in('section_id', sectionIds);
+      
+      if (fieldData && fieldData.length > 0) {
+        const fieldIds = fieldData.map((f) => f.id);
+        const { data: vals } = await supabase
+          .from('student_field_values')
+          .select('*')
+          .in('field_id', fieldIds);
+        const grouped = {};
+        (vals || []).forEach((v) => {
+          if (!grouped[v.student_id]) grouped[v.student_id] = {};
+          grouped[v.student_id][v.field_id] = v.value;
+        });
+        setStudentSubmissions(grouped);
+      }
     }
-  }, [selectedClassId, studentSections]);
+  }, [selectedClassId]);
 
   useEffect(() => { fetchAssignedClasses(); }, [fetchAssignedClasses]);
   useEffect(() => {
