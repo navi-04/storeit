@@ -1,6 +1,6 @@
 import React from 'react';
 import { HashRouter, Routes, Route, Navigate } from 'react-router-dom';
-import { LoadingOverlay, Center, Text } from '@mantine/core';
+import { LoadingOverlay, Center } from '@mantine/core';
 import { AuthProvider, useAuth } from './context/AuthContext';
 import ProtectedRoute from './routes/ProtectedRoute';
 import LoginPage from './pages/LoginPage';
@@ -19,11 +19,7 @@ function RoleRedirect() {
     </Center>
   );
   if (!user) return <Navigate to="/login" replace />;
-  if (!profile) return (
-    <Center h="100vh">
-      <Text c="dimmed">Loading profile...</Text>
-    </Center>
-  );
+  if (!profile) return <Navigate to="/login" replace />;
 
   const roleRoutes = {
     org_admin: '/org',

@@ -1,35 +1,54 @@
 import React, { useState, useEffect } from 'react';
+import {
+  AppShell,
+  Container,
+  Title,
+  Card,
+  TextInput,
+  PasswordInput,
+  Select,
+  Button,
+  Group,
+  Stack,
+  Table,
+  Alert,
+  Modal,
+  Text,
+  ActionIcon,
+} from '@mantine/core';
+import { notifications } from '@mantine/notifications';
+import {
+  IconAlertCircle,
+  IconCheck,
+  IconTrash,
+  IconEdit,
+  IconEye,
+  IconEyeOff,
+  IconAlertTriangle,
+} from '@tabler/icons-react';
 import { supabase, supabaseAdmin } from '../supabaseClient';
 import { usernameToEmail } from '../utils/authEmail';
 import Navbar from '../components/Navbar';
 
 export default function OrgAdminDashboard() {
-  // --- Departments ---
   const [departments, setDepartments] = useState([]);
   const [deptName, setDeptName] = useState('');
   const [deptLoading, setDeptLoading] = useState(false);
 
-  // --- Super Admins ---
   const [superAdmins, setSuperAdmins] = useState([]);
   const [saForm, setSaForm] = useState({ username: '', password: '', full_name: '', department_id: '' });
   const [saLoading, setSaLoading] = useState(false);
 
-  // Store created credentials temporarily
   const [createdSuperAdmins, setCreatedSuperAdmins] = useState({});
-
-  // Edit modals
   const [editingDepartment, setEditingDepartment] = useState(null);
   const [editingSuperAdmin, setEditingSuperAdmin] = useState(null);
-
-  // Password visibility
   const [visiblePasswords, setVisiblePasswords] = useState({});
 
-  const togglePasswordVisibility = (userId) => {
-    setVisiblePasswords(prev => ({ ...prev, [userId]: !prev[userId] }));
-  };
-
   const [error, setError] = useState('');
-  const [success, setSuccess] = useState('');
+
+  const togglePasswordVisibility = (userId) => {
+    setVisiblePasswords((prev) => ({ ...prev, [userId]: !prev[userId] }));
+  };
 
   useEffect(() => {
     loadDepartments();
@@ -55,21 +74,23 @@ export default function OrgAdminDashboard() {
   const createDepartment = async (e) => {
     e.preventDefault();
     if (!deptName.trim()) return;
-    setDeptLoading(true);
-    setError('');
-    setSuccess('');
+    setDeptLoading(true); setError('');
     const { error } = await supabase.from('departments').insert({ name: deptName.trim() });
     if (error) { setError(error.message); }
-    else { setSuccess('Department created!'); setDeptName(''); loadDepartments(); }
+    else {
+      notifications.show({ title: 'Success', message: 'Department created!', color: 'green', icon: <IconCheck size={16} /> });
+      setDeptName('');
+      loadDepartments();
+    }
     setDeptLoading(false);
   };
 
   const deleteDepartment = async (id) => {
-    if (!window.confirm('Delete this department? All related classes, users (faculty, students, super admins), and their data will be permanently deleted. This cannot be undone.')) return;
-    setError(''); setSuccess('');
+    if (!window.confirm('Delete this department? All related data will be permanently deleted.')) return;
+    setError('');
     const { error } = await supabase.from('departments').delete().eq('id', id);
     if (error) { setError(error.message); return; }
-    setSuccess('Department deleted!');
+    notifications.show({ title: 'Deleted', message: 'Department deleted!', color: 'green' });
     loadDepartments();
     loadSuperAdmins();
   };
@@ -77,18 +98,14 @@ export default function OrgAdminDashboard() {
   const updateDepartment = async (e) => {
     e.preventDefault();
     if (!editingDepartment?.name.trim()) return;
-    setDeptLoading(true);
-    setError('');
-    setSuccess('');
+    setDeptLoading(true); setError('');
     try {
       const { error } = await supabase.from('departments').update({ name: editingDepartment.name.trim() }).eq('id', editingDepartment.id);
       if (error) throw error;
-      setSuccess('Department updated!');
+      notifications.show({ title: 'Updated', message: 'Department updated!', color: 'green' });
       setEditingDepartment(null);
       loadDepartments();
-    } catch (err) {
-      setError(err.message);
-    }
+    } catch (err) { setError(err.message); }
     setDeptLoading(false);
   };
 
@@ -98,26 +115,18 @@ export default function OrgAdminDashboard() {
       setError('All fields required for Super Admin');
       return;
     }
-    setSaLoading(true);
-    setError('');
-    setSuccess('');
+    setSaLoading(true); setError('');
     try {
-      // Use supabaseAdmin (non-session-persisting client) so admin session is NOT replaced
       const fakeEmail = usernameToEmail(saForm.username);
       const { data: signUpData, error: signUpError } = await supabaseAdmin.auth.signUp({
         email: fakeEmail,
         password: saForm.password,
         options: {
-          data: {
-            full_name: saForm.full_name,
-            role: 'super_admin',
-            username: saForm.username.trim(),
-          },
+          data: { full_name: saForm.full_name, role: 'super_admin', username: saForm.username.trim() },
         },
       });
       if (signUpError) throw signUpError;
 
-      // Update profile with department and role
       if (signUpData.user) {
         const { error: profileError } = await supabase
           .from('profiles')
@@ -130,364 +139,206 @@ export default function OrgAdminDashboard() {
           })
           .eq('id', signUpData.user.id);
         if (profileError) throw profileError;
-        // Store credentials temporarily
-        setCreatedSuperAdmins(prev => ({ ...prev, [signUpData.user.id]: { username: saForm.username, password: saForm.password } }));
-        // Auto-show password for newly created super admin
-        setVisiblePasswords(prev => ({ ...prev, [signUpData.user.id]: true }));
+        setCreatedSuperAdmins((prev) => ({ ...prev, [signUpData.user.id]: { username: saForm.username, password: saForm.password } }));
+        setVisiblePasswords((prev) => ({ ...prev, [signUpData.user.id]: true }));
       }
 
-      setSuccess('Super Admin created!');
+      notifications.show({ title: 'Success', message: 'Super Admin created!', color: 'green', icon: <IconCheck size={16} /> });
       setSaForm({ username: '', password: '', full_name: '', department_id: '' });
       loadSuperAdmins();
-    } catch (err) {
-      setError(err.message);
-    }
+    } catch (err) { setError(err.message); }
     setSaLoading(false);
   };
 
   const deleteSuperAdmin = async (id, username) => {
-    if (!window.confirm(`Delete super admin "${username}"? This cannot be undone.`)) return;
-    setError(''); setSuccess('');
+    if (!window.confirm(`Delete super admin "${username}"?`)) return;
+    setError('');
     try {
-      const { error } = await supabase.from('profiles').delete().eq('id', id);
+      const { error } = await supabase.rpc('delete_auth_user', { target_user_id: id });
       if (error) throw error;
-      // Remove from created super admins
-      setCreatedSuperAdmins(prev => {
-        const newAdmins = { ...prev };
-        delete newAdmins[id];
-        return newAdmins;
-      });
-      setSuccess('Super Admin deleted!');
+      setCreatedSuperAdmins((prev) => { const n = { ...prev }; delete n[id]; return n; });
+      notifications.show({ title: 'Deleted', message: 'Super Admin deleted!', color: 'green' });
       loadSuperAdmins();
     } catch (err) { setError(err.message); }
   };
 
   const updateSuperAdmin = async (e) => {
     e.preventDefault();
-    setSaLoading(true);
-    setError('');
-    setSuccess('');
+    setSaLoading(true); setError('');
     try {
       const { error } = await supabase.from('profiles')
-        .update({ 
-          full_name: editingSuperAdmin.full_name, 
-          username: editingSuperAdmin.username,
-          department_id: editingSuperAdmin.department_id
-        })
+        .update({ full_name: editingSuperAdmin.full_name, username: editingSuperAdmin.username, department_id: editingSuperAdmin.department_id })
         .eq('id', editingSuperAdmin.id);
       if (error) throw error;
-      setSuccess('Super Admin updated!');
+      notifications.show({ title: 'Updated', message: 'Super Admin updated!', color: 'green' });
       setEditingSuperAdmin(null);
       loadSuperAdmins();
-    } catch (err) {
-      setError(err.message);
-    }
+    } catch (err) { setError(err.message); }
     setSaLoading(false);
   };
 
   const clearDatabase = async () => {
     const confirmText = 'DELETE EVERYTHING';
-    const userInput = window.prompt(
-      `⚠️ DANGER: This will permanently delete ALL data from the database!\n\n` +
-      `This includes:\n` +
-      `- All departments\n` +
-      `- All users (super admins, faculty, students)\n` +
-      `- All classes\n` +
-      `- All forms and form data\n` +
-      `- Everything except your org admin account\n\n` +
-      `This action CANNOT be undone!\n\n` +
-      `Type "${confirmText}" to confirm:`
-    );
-    
+    const userInput = window.prompt(`WARNING: This will permanently delete ALL data!\nType "${confirmText}" to confirm:`);
     if (userInput !== confirmText) {
-      if (userInput !== null) {
-        setError('Database clear cancelled - confirmation text did not match.');
-      }
+      if (userInput !== null) setError('Cancelled — text did not match.');
       return;
     }
-
     setError('');
-    setSuccess('');
     setDeptLoading(true);
-
     try {
-      // Get current user ID to preserve org admin account
       const { data: { user } } = await supabase.auth.getUser();
       if (!user) throw new Error('Not authenticated');
 
-      // Step 1: Delete all departments (cascades to classes and related data)
+      // Delete all auth users except current user (profiles cascade via FK)
+      const { data: allProfiles } = await supabase.from('profiles').select('id').neq('id', user.id);
+      for (const p of (allProfiles || [])) {
+        await supabase.rpc('delete_auth_user', { target_user_id: p.id });
+      }
+
+      // Delete all departments (classes etc. cascade)
       const { error: deptError } = await supabase.from('departments').delete().neq('id', '00000000-0000-0000-0000-000000000000');
       if (deptError) throw deptError;
-
-      // Step 2: Delete all profiles except current org admin
-      const { error: profileError } = await supabase.from('profiles').delete().neq('id', user.id);
-      if (profileError) throw profileError;
-
-      setSuccess('✅ Database cleared successfully! All data has been deleted except your org admin account.');
+      notifications.show({ title: 'Cleared', message: 'All data deleted except your account.', color: 'green', icon: <IconCheck size={16} /> });
       loadDepartments();
       loadSuperAdmins();
-    } catch (err) {
-      setError(`Failed to clear database: ${err.message}`);
-    } finally {
-      setDeptLoading(false);
-    }
+    } catch (err) { setError(`Failed: ${err.message}`); }
+    finally { setDeptLoading(false); }
   };
 
   return (
-    <div className="dashboard">
-      <Navbar />
-      <div className="container">
-        <div style={{ position: 'relative' }}>
-          <h2>Org Admin Dashboard</h2>
-        </div>
+    <AppShell header={{ height: 60 }} padding="md">
+      <AppShell.Header bg="indigo.6">
+        <Navbar />
+      </AppShell.Header>
+      <AppShell.Main>
+        <Container size="md" py="lg">
+          <Title order={2} mb="lg">Org Admin Dashboard</Title>
 
-        {error && <div className="error-msg">{error}</div>}
-        {success && <div className="success-msg">{success}</div>}
-
-        {/* Create Department */}
-        <section className="card">
-          <h3>Create Department</h3>
-          <form onSubmit={createDepartment} className="form-row">
-            <input
-              type="text"
-              placeholder="Department Name"
-              value={deptName}
-              onChange={(e) => setDeptName(e.target.value)}
-            />
-            <button className="btn" disabled={deptLoading}>
-              {deptLoading ? 'Creating...' : 'Create'}
-            </button>
-          </form>
-
-          <h4>Existing Departments ({departments.length})</h4>
-          {departments.length === 0 ? (
-            <p className="text-muted">No departments yet.</p>
-          ) : (
-            <table className="table">
-              <thead>
-                <tr><th>Name</th><th>Created</th><th>Actions</th></tr>
-              </thead>
-              <tbody>
-                {departments.map((d) => (
-                  <tr key={d.id}>
-                    <td>{d.name}</td>
-                    <td>{new Date(d.created_at).toLocaleDateString()}</td>
-                    <td>
-                      <button className="btn btn-sm" onClick={() => setEditingDepartment(d)} style={{ marginRight: '0.5rem' }}>Edit</button>
-                      <button className="btn btn-sm btn-danger" onClick={() => deleteDepartment(d.id)}>Delete</button>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
+          {error && (
+            <Alert icon={<IconAlertCircle size={16} />} color="red" variant="light" mb="md" withCloseButton onClose={() => setError('')}>
+              {error}
+            </Alert>
           )}
-        </section>
 
-        {/* Create Super Admin */}
-        <section className="card">
-          <h3>Create Super Admin</h3>
-          <form onSubmit={createSuperAdmin}>
-            <div className="form-group">
-              <label>Full Name</label>
-              <input
-                type="text"
-                value={saForm.full_name}
-                onChange={(e) => setSaForm({ ...saForm, full_name: e.target.value })}
-                placeholder="Full Name"
-              />
-            </div>
-            <div className="form-group">
-              <label>Username</label>
-              <input
-                type="text"
-                value={saForm.username}
-                onChange={(e) => setSaForm({ ...saForm, username: e.target.value })}
-                placeholder="Username (used for login)"
-                required
-              />
-            </div>
-            <div className="form-group">
-              <label>Password</label>
-              <input
-                type="password"
-                value={saForm.password}
-                onChange={(e) => setSaForm({ ...saForm, password: e.target.value })}
-                placeholder="Min 6 characters"
-                required
-              />
-            </div>
-            <div className="form-group">
-              <label>Department</label>
-              <select
-                value={saForm.department_id}
-                onChange={(e) => setSaForm({ ...saForm, department_id: e.target.value })}
-                required
-              >
-                <option value="">-- Select Department --</option>
-                {departments.map((d) => (
-                  <option key={d.id} value={d.id}>{d.name}</option>
-                ))}
-              </select>
-            </div>
-            <button className="btn" disabled={saLoading}>
-              {saLoading ? 'Creating...' : 'Create Super Admin'}
-            </button>
-          </form>
+          {/* Create Department */}
+          <Card withBorder shadow="sm" padding="lg" mb="lg">
+            <Title order={4} mb="sm">Create Department</Title>
+            <form onSubmit={createDepartment}>
+              <Group>
+                <TextInput placeholder="Department Name" value={deptName} onChange={(e) => setDeptName(e.currentTarget.value)} style={{ flex: 1 }} />
+                <Button type="submit" loading={deptLoading}>Create</Button>
+              </Group>
+            </form>
+            <Title order={5} mt="lg" mb="xs">Existing Departments ({departments.length})</Title>
+            {departments.length === 0 ? <Text c="dimmed">No departments yet.</Text> : (
+              <Table striped highlightOnHover>
+                <Table.Thead><Table.Tr><Table.Th>Name</Table.Th><Table.Th>Created</Table.Th><Table.Th>Actions</Table.Th></Table.Tr></Table.Thead>
+                <Table.Tbody>
+                  {departments.map((d) => (
+                    <Table.Tr key={d.id}>
+                      <Table.Td>{d.name}</Table.Td>
+                      <Table.Td>{new Date(d.created_at).toLocaleDateString()}</Table.Td>
+                      <Table.Td>
+                        <Group gap="xs">
+                          <ActionIcon variant="light" color="indigo" onClick={() => setEditingDepartment(d)}><IconEdit size={16} /></ActionIcon>
+                          <ActionIcon variant="light" color="red" onClick={() => deleteDepartment(d.id)}><IconTrash size={16} /></ActionIcon>
+                        </Group>
+                      </Table.Td>
+                    </Table.Tr>
+                  ))}
+                </Table.Tbody>
+              </Table>
+            )}
+          </Card>
 
-          <h4>Existing Super Admins ({superAdmins.length})</h4>
-          {superAdmins.length === 0 ? (
-            <p className="text-muted">No super admins yet.</p>
-          ) : (
-            <table className="table">
-              <thead>
-                <tr><th>Name</th><th>Username</th><th>Password</th><th>Department</th><th>Actions</th></tr>
-              </thead>
-              <tbody>
-                {superAdmins.map((sa) => (
-                  <tr key={sa.id}>
-                    <td>{sa.full_name}</td>
-                    <td>{sa.username}</td>
-                    <td>
-                      {sa.password || createdSuperAdmins[sa.id] ? (
-                        <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-                          <span style={{ color: '#059669', fontFamily: 'monospace', fontWeight: 'bold' }}>
-                            {visiblePasswords[sa.id] ? (sa.password || createdSuperAdmins[sa.id]?.password) : '••••••••'}
-                          </span>
-                          <button
-                            onClick={() => togglePasswordVisibility(sa.id)}
-                            className="password-toggle-btn"
-                            title={visiblePasswords[sa.id] ? 'Hide password' : 'Show password'}
-                          >
-                            {visiblePasswords[sa.id] ? '🙈' : '👁️'}
-                          </button>
-                        </div>
-                      ) : (
-                        <span className="text-muted">••••••••</span>
-                      )}
-                    </td>
-                    <td>{sa.departments?.name || '—'}</td>
-                    <td>
-                      <button className="btn btn-sm" onClick={() => setEditingSuperAdmin(sa)} style={{ marginRight: '0.5rem' }}>Edit</button>
-                      <button className="btn btn-sm btn-danger" onClick={() => deleteSuperAdmin(sa.id, sa.username)}>Delete</button>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          )}
-        </section>
+          {/* Create Super Admin */}
+          <Card withBorder shadow="sm" padding="lg" mb="lg">
+            <Title order={4} mb="sm">Create Super Admin</Title>
+            <form onSubmit={createSuperAdmin}>
+              <Stack gap="sm">
+                <TextInput label="Full Name" value={saForm.full_name} onChange={(e) => setSaForm({ ...saForm, full_name: e.currentTarget.value })} placeholder="Full Name" />
+                <TextInput label="Username" value={saForm.username} onChange={(e) => setSaForm({ ...saForm, username: e.currentTarget.value })} placeholder="Username (used for login)" required />
+                <PasswordInput label="Password" value={saForm.password} onChange={(e) => setSaForm({ ...saForm, password: e.currentTarget.value })} placeholder="Min 6 characters" required />
+                <Select label="Department" placeholder="-- Select Department --" data={departments.map((d) => ({ value: d.id, label: d.name }))} value={saForm.department_id || null} onChange={(v) => setSaForm({ ...saForm, department_id: v || '' })} required />
+                <Button type="submit" loading={saLoading}>Create Super Admin</Button>
+              </Stack>
+            </form>
+            <Title order={5} mt="lg" mb="xs">Existing Super Admins ({superAdmins.length})</Title>
+            {superAdmins.length === 0 ? <Text c="dimmed">No super admins yet.</Text> : (
+              <Table striped highlightOnHover>
+                <Table.Thead><Table.Tr><Table.Th>Name</Table.Th><Table.Th>Username</Table.Th><Table.Th>Password</Table.Th><Table.Th>Department</Table.Th><Table.Th>Actions</Table.Th></Table.Tr></Table.Thead>
+                <Table.Tbody>
+                  {superAdmins.map((sa) => (
+                    <Table.Tr key={sa.id}>
+                      <Table.Td>{sa.full_name}</Table.Td>
+                      <Table.Td>{sa.username}</Table.Td>
+                      <Table.Td>
+                        {sa.password || createdSuperAdmins[sa.id] ? (
+                          <Group gap="xs">
+                            <Text size="sm" ff="monospace" c="teal" fw={600}>
+                              {visiblePasswords[sa.id] ? (sa.password || createdSuperAdmins[sa.id]?.password) : '••••••••'}
+                            </Text>
+                            <ActionIcon variant="subtle" size="sm" onClick={() => togglePasswordVisibility(sa.id)}>
+                              {visiblePasswords[sa.id] ? <IconEyeOff size={14} /> : <IconEye size={14} />}
+                            </ActionIcon>
+                          </Group>
+                        ) : <Text c="dimmed" size="sm">••••••••</Text>}
+                      </Table.Td>
+                      <Table.Td>{sa.departments?.name || '—'}</Table.Td>
+                      <Table.Td>
+                        <Group gap="xs">
+                          <ActionIcon variant="light" color="indigo" onClick={() => setEditingSuperAdmin(sa)}><IconEdit size={16} /></ActionIcon>
+                          <ActionIcon variant="light" color="red" onClick={() => deleteSuperAdmin(sa.id, sa.username)}><IconTrash size={16} /></ActionIcon>
+                        </Group>
+                      </Table.Td>
+                    </Table.Tr>
+                  ))}
+                </Table.Tbody>
+              </Table>
+            )}
+          </Card>
 
-        {/* Danger Zone - Clear Database */}
-        <section className="card danger-zone-card">
-          <h3 className="danger-title">⚠️ Danger Zone</h3>
-          <div className="danger-warning-box">
-            <p className="danger-warning-title">Clear All Database</p>
-            <p className="danger-warning-text">
-              This will permanently delete <strong>ALL</strong> data from the database including all departments, 
-              users (super admins, faculty, students), classes, forms, and form submissions. 
-              Only your org admin account will be preserved.
-            </p>
-          </div>
-          <button 
-            className="btn btn-danger-zone" 
-            onClick={clearDatabase}
-            disabled={deptLoading}
-          >
-            {deptLoading ? 'Clearing...' : '🗑️ Clear All Database'}
-          </button>
-        </section>
-      </div>
+          {/* Danger Zone */}
+          <Card withBorder shadow="sm" padding="lg" mb="lg" style={{ borderColor: 'var(--mantine-color-red-5)', borderWidth: 2 }}>
+            <Group gap="xs" mb="md">
+              <IconAlertTriangle size={20} color="var(--mantine-color-red-6)" />
+              <Title order={4} c="red">Danger Zone</Title>
+            </Group>
+            <Alert color="yellow" variant="light" mb="md">
+              <Text fw={600} mb={4}>Clear All Database</Text>
+              <Text size="sm">
+                This will permanently delete <b>ALL</b> data including departments, users, classes, forms, and submissions. Only your org admin account will be preserved.
+              </Text>
+            </Alert>
+            <Button color="red" onClick={clearDatabase} loading={deptLoading} leftSection={<IconTrash size={16} />}>
+              Clear All Database
+            </Button>
+          </Card>
+        </Container>
+      </AppShell.Main>
 
       {/* Edit Department Modal */}
-      {editingDepartment && (
-        <div className="modal-overlay" onClick={() => setEditingDepartment(null)}>
-          <div className="modal-content" onClick={(e) => e.stopPropagation()}>
-            <h3>Edit Department</h3>
-            <form onSubmit={updateDepartment}>
-              <div className="form-group">
-                <label>Department Name</label>
-                <input
-                  type="text"
-                  value={editingDepartment.name}
-                  onChange={(e) => setEditingDepartment({ ...editingDepartment, name: e.target.value })}
-                  placeholder="Department Name"
-                  required
-                />
-              </div>
-              <div style={{ display: 'flex', gap: '0.5rem', marginTop: '1rem' }}>
-                <button className="btn" type="submit" disabled={deptLoading}>
-                  {deptLoading ? 'Updating...' : 'Update'}
-                </button>
-                <button
-                  className="btn btn-outline"
-                  type="button"
-                  onClick={() => setEditingDepartment(null)}
-                  style={{ background: '#6b7280', color: 'white' }}
-                >
-                  Cancel
-                </button>
-              </div>
-            </form>
-          </div>
-        </div>
-      )}
+      <Modal opened={!!editingDepartment} onClose={() => setEditingDepartment(null)} title="Edit Department">
+        <form onSubmit={updateDepartment}>
+          <Stack gap="sm">
+            <TextInput label="Department Name" value={editingDepartment?.name || ''} onChange={(e) => setEditingDepartment({ ...editingDepartment, name: e.currentTarget.value })} required />
+            <Group><Button type="submit" loading={deptLoading}>Update</Button><Button variant="light" color="gray" onClick={() => setEditingDepartment(null)}>Cancel</Button></Group>
+          </Stack>
+        </form>
+      </Modal>
 
       {/* Edit Super Admin Modal */}
-      {editingSuperAdmin && (
-        <div className="modal-overlay" onClick={() => setEditingSuperAdmin(null)}>
-          <div className="modal-content" onClick={(e) => e.stopPropagation()}>
-            <h3>Edit Super Admin</h3>
-            <form onSubmit={updateSuperAdmin}>
-              <div className="form-group">
-                <label>Full Name</label>
-                <input
-                  type="text"
-                  value={editingSuperAdmin.full_name}
-                  onChange={(e) => setEditingSuperAdmin({ ...editingSuperAdmin, full_name: e.target.value })}
-                  placeholder="Full Name"
-                  required
-                />
-              </div>
-              <div className="form-group">
-                <label>Username</label>
-                <input
-                  type="text"
-                  value={editingSuperAdmin.username}
-                  onChange={(e) => setEditingSuperAdmin({ ...editingSuperAdmin, username: e.target.value })}
-                  placeholder="Username"
-                  required
-                />
-              </div>
-              <div className="form-group">
-                <label>Department</label>
-                <select
-                  value={editingSuperAdmin.department_id || ''}
-                  onChange={(e) => setEditingSuperAdmin({ ...editingSuperAdmin, department_id: e.target.value })}
-                  required
-                >
-                  <option value="">-- Select Department --</option>
-                  {departments.map((d) => (
-                    <option key={d.id} value={d.id}>{d.name}</option>
-                  ))}
-                </select>
-              </div>
-              <div style={{ display: 'flex', gap: '0.5rem', marginTop: '1rem' }}>
-                <button className="btn" type="submit" disabled={saLoading}>
-                  {saLoading ? 'Updating...' : 'Update'}
-                </button>
-                <button
-                  className="btn btn-outline"
-                  type="button"
-                  onClick={() => setEditingSuperAdmin(null)}
-                  style={{ background: '#6b7280', color: 'white' }}
-                >
-                  Cancel
-                </button>
-              </div>
-            </form>
-          </div>
-        </div>
-      )}
-    </div>
+      <Modal opened={!!editingSuperAdmin} onClose={() => setEditingSuperAdmin(null)} title="Edit Super Admin">
+        <form onSubmit={updateSuperAdmin}>
+          <Stack gap="sm">
+            <TextInput label="Full Name" value={editingSuperAdmin?.full_name || ''} onChange={(e) => setEditingSuperAdmin({ ...editingSuperAdmin, full_name: e.currentTarget.value })} required />
+            <TextInput label="Username" value={editingSuperAdmin?.username || ''} onChange={(e) => setEditingSuperAdmin({ ...editingSuperAdmin, username: e.currentTarget.value })} required />
+            <Select label="Department" data={departments.map((d) => ({ value: d.id, label: d.name }))} value={editingSuperAdmin?.department_id || null} onChange={(v) => setEditingSuperAdmin({ ...editingSuperAdmin, department_id: v || '' })} required />
+            <Group><Button type="submit" loading={saLoading}>Update</Button><Button variant="light" color="gray" onClick={() => setEditingSuperAdmin(null)}>Cancel</Button></Group>
+          </Stack>
+        </form>
+      </Modal>
+    </AppShell>
   );
 }

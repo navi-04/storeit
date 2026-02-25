@@ -19,9 +19,10 @@ export default function LoginPage() {
   const [password, setPassword] = useState('');
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
-  const { signIn, user, profile, configError, authError } = useAuth();
+  const { signIn, signOut, user, profile, loading: authLoading, configError, authError } = useAuth();
   const navigate = useNavigate();
 
+  // Navigate away once profile is loaded
   useEffect(() => {
     if (profile) {
       const roleRoutes = {
@@ -34,19 +35,20 @@ export default function LoginPage() {
     }
   }, [profile, navigate]);
 
+  // Handle auth errors and orphaned sessions
   useEffect(() => {
     if (authError) {
       setError(authError);
       setLoading(false);
     }
-    if (user && !profile && !authError) {
-      setLoading(true);
-      setError('');
+  }, [authError]);
+
+  // If auth finished loading, user exists but profile is missing, sign out the stale session
+  useEffect(() => {
+    if (!authLoading && user && !profile && !authError) {
+      signOut();
     }
-    if (!user) {
-      setLoading(false);
-    }
-  }, [authError, profile, user]);
+  }, [authLoading, user, profile, authError, signOut]);
 
   const handleSubmit = async (e) => {
     e.preventDefault();

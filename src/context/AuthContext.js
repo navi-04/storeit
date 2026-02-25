@@ -130,12 +130,11 @@ export function AuthProvider({ children }) {
     } = supabase.auth.onAuthStateChange(async (_event, session) => {
       try {
         if (session?.user) {
+          const p = await fetchProfileWithTimeout(session.user);
           if (isMounted) {
             setUser(session.user);
-            setLoading(false);
+            setProfile(p);
           }
-          const p = await fetchProfileWithTimeout(session.user);
-          if (isMounted) setProfile(p);
         } else {
           setAuthError('');
           safeSetAuthState(null, null);

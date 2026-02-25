@@ -168,6 +168,16 @@ as $$
   );
 $$;
 
+-- Delete an auth user entirely (profile cascades via FK).
+-- Callable from the client via supabase.rpc('delete_auth_user', { target_user_id: '...' })
+create or replace function public.delete_auth_user(target_user_id uuid)
+returns void language plpgsql security definer set search_path = public
+as $$
+begin
+  delete from auth.users where id = target_user_id;
+end;
+$$;
+
 -- ============================================================
 -- 4) AUTO-CREATE PROFILE ON SIGNUP
 -- ============================================================

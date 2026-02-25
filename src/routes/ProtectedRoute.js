@@ -23,14 +23,7 @@ export default function ProtectedRoute({ children, allowedRoles }) {
   }
 
   if (!profile) {
-    return (
-      <Center h="100vh">
-        <Stack align="center" gap="md">
-          <Loader size="lg" color="indigo" />
-          <Text c="dimmed">Loading profile...</Text>
-        </Stack>
-      </Center>
-    );
+    return <Navigate to="/login" state={{ from: location }} replace />;
   }
 
   if (allowedRoles && !allowedRoles.includes(profile.role)) {
