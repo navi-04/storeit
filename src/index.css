@@ -1,9 +1,5 @@
-/* Global reset — base styles are in App.css */
+/* StoreIt — Minimal global styles (Mantine handles the rest) */
 body {
   margin: 0;
   padding: 0;
-}
-
-code {
-  font-family: source-code-pro, Menlo, Monaco, Consolas, 'Courier New', monospace;
 }

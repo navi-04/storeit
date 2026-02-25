@@ -1,5 +1,17 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
+import {
+  Center,
+  Card,
+  Title,
+  Text,
+  TextInput,
+  PasswordInput,
+  Button,
+  Stack,
+  Alert,
+} from '@mantine/core';
+import { IconAlertCircle } from '@tabler/icons-react';
 import { useAuth } from '../context/AuthContext';
 
 export default function LoginPage() {
@@ -10,7 +22,6 @@ export default function LoginPage() {
   const { signIn, user, profile, configError, authError } = useAuth();
   const navigate = useNavigate();
 
-  // Once profile is loaded after sign-in, redirect
   useEffect(() => {
     if (profile) {
       const roleRoutes = {
@@ -28,13 +39,10 @@ export default function LoginPage() {
       setError(authError);
       setLoading(false);
     }
-
     if (user && !profile && !authError) {
-      // Profile is being fetched — show loading but don't show error yet
       setLoading(true);
       setError('');
     }
-
     if (!user) {
       setLoading(false);
     }
@@ -46,7 +54,6 @@ export default function LoginPage() {
     setLoading(true);
     try {
       await signIn(username, password);
-      // Don't navigate here — useEffect handles it once profile loads
     } catch (err) {
       setError(err.message || 'Login failed');
       setLoading(false);
@@ -54,41 +61,57 @@ export default function LoginPage() {
   };
 
   return (
-    <div className="login-container">
-      <div className="login-card">
-        <h1>StoreIt</h1>
-        <p className="text-muted">Student Detail Management</p>
+    <Center mih="100vh" p="md" bg="gray.1">
+      <Card shadow="md" padding="xl" radius="md" withBorder w={400} maw="100%">
+        <Stack align="center" gap={4} mb="lg">
+          <Title order={2} c="indigo">StoreIt</Title>
+          <Text c="dimmed" size="sm">Student Detail Management</Text>
+        </Stack>
+
         <form onSubmit={handleSubmit}>
-          {configError && <div className="error-msg">{configError}</div>}
-          {error && <div className="error-msg">{error}</div>}
-          <div className="form-group">
-            <label>Username or Email</label>
-            <input
-              type="text"
-              value={username}
-              onChange={(e) => setUsername(e.target.value)}
-              required
+          <Stack gap="sm">
+            {configError && (
+              <Alert icon={<IconAlertCircle size={16} />} color="red" variant="light">
+                {configError}
+              </Alert>
+            )}
+            {error && (
+              <Alert icon={<IconAlertCircle size={16} />} color="red" variant="light">
+                {error}
+              </Alert>
+            )}
+
+            <TextInput
+              label="Username or Email"
               placeholder="Enter your username or email"
+              value={username}
+              onChange={(e) => setUsername(e.currentTarget.value)}
+              required
               autoComplete="username"
               disabled={Boolean(configError)}
             />
-          </div>
-          <div className="form-group">
-            <label>Password</label>
-            <input
-              type="password"
-              value={password}
-              onChange={(e) => setPassword(e.target.value)}
-              required
+
+            <PasswordInput
+              label="Password"
               placeholder="Enter your password"
+              value={password}
+              onChange={(e) => setPassword(e.currentTarget.value)}
+              required
               disabled={Boolean(configError)}
             />
-          </div>
-          <button className="btn btn-block" type="submit" disabled={loading || Boolean(configError)}>
-            {loading ? 'Signing in...' : 'Sign In'}
-          </button>
+
+            <Button
+              type="submit"
+              fullWidth
+              loading={loading}
+              disabled={Boolean(configError)}
+              mt="xs"
+            >
+              Sign In
+            </Button>
+          </Stack>
         </form>
-      </div>
-    </div>
+      </Card>
+    </Center>
   );
 }

@@ -1,10 +1,23 @@
 import React from 'react';
+import {
+  TextInput,
+  NumberInput,
+  Textarea,
+  Select,
+  Radio,
+  Stack,
+  Card,
+  Title,
+  Text,
+  Anchor,
+  Group,
+} from '@mantine/core';
 
 /**
  * FieldRenderer — renders sections with grouped fields for filling values.
  *
  * Props:
- *   sections  — array of { id, section_name, fields: [{ id, field_name, field_type, field_options, required, upload_link }] }
+ *   sections  — array of { id, section_name, fields: [...] }
  *   values    — { [field_id]: value }
  *   onChange  — (newValues) => void
  *   disabled  — boolean
@@ -15,91 +28,139 @@ export default function FieldRenderer({ sections, values, onChange, disabled }) 
   };
 
   if (!sections || sections.length === 0) {
-    return <p className="text-muted">No sections to display.</p>;
+    return <Text c="dimmed">No sections to display.</Text>;
   }
 
   return (
-    <div className="field-renderer">
+    <Stack gap="md">
       {sections.map((section) => (
-        <div key={section.id} className="section-render-card">
-          <h4 className="section-render-title">{section.section_name}</h4>
-          {(section.fields || []).map((field) => {
-            const val = values[field.id] || '';
-            return (
-              <div key={field.id} className="form-group">
-                <label>
-                  {field.field_name}
-                  {field.required && <span className="required-star"> *</span>}
+        <Card key={section.id} withBorder shadow="xs" padding="lg">
+          <Title order={5} c="indigo" mb="md" pb="xs" style={{ borderBottom: '2px solid var(--mantine-color-indigo-5)' }}>
+            {section.section_name}
+          </Title>
+          <Stack gap="sm">
+            {(section.fields || []).map((field) => {
+              const val = values[field.id] || '';
+              const label = (
+                <Group gap={4}>
+                  <span>{field.field_name}</span>
+                  {field.required && <Text component="span" c="red" fw={700}> *</Text>}
                   {field.upload_link && (
-                    <a
+                    <Anchor
                       href={field.upload_link}
                       target="_blank"
                       rel="noopener noreferrer"
-                      style={{ marginLeft: '0.5rem', fontSize: '0.8rem', color: '#4f46e5' }}
+                      size="xs"
+                      ml="xs"
                     >
                       (Upload Link)
-                    </a>
+                    </Anchor>
                   )}
-                </label>
+                </Group>
+              );
 
-                {field.field_type === 'text' && (
-                  <input type="text" value={val} onChange={(e) => handleChange(field.id, e.target.value)} disabled={disabled} />
-                )}
+              if (field.field_type === 'text') {
+                return (
+                  <TextInput
+                    key={field.id}
+                    label={label}
+                    value={val}
+                    onChange={(e) => handleChange(field.id, e.currentTarget.value)}
+                    disabled={disabled}
+                  />
+                );
+              }
 
-                {field.field_type === 'number' && (
-                  <input type="number" value={val} onChange={(e) => handleChange(field.id, e.target.value)} disabled={disabled} />
-                )}
+              if (field.field_type === 'number') {
+                return (
+                  <NumberInput
+                    key={field.id}
+                    label={label}
+                    value={val === '' ? '' : Number(val)}
+                    onChange={(v) => handleChange(field.id, String(v ?? ''))}
+                    disabled={disabled}
+                    hideControls
+                  />
+                );
+              }
 
-                {field.field_type === 'date' && (
-                  <input type="date" value={val} onChange={(e) => handleChange(field.id, e.target.value)} disabled={disabled} />
-                )}
+              if (field.field_type === 'date') {
+                return (
+                  <TextInput
+                    key={field.id}
+                    label={label}
+                    type="date"
+                    value={val}
+                    onChange={(e) => handleChange(field.id, e.currentTarget.value)}
+                    disabled={disabled}
+                  />
+                );
+              }
 
-                {field.field_type === 'textarea' && (
-                  <textarea value={val} onChange={(e) => handleChange(field.id, e.target.value)} disabled={disabled} rows={3} />
-                )}
+              if (field.field_type === 'textarea') {
+                return (
+                  <Textarea
+                    key={field.id}
+                    label={label}
+                    value={val}
+                    onChange={(e) => handleChange(field.id, e.currentTarget.value)}
+                    disabled={disabled}
+                    minRows={3}
+                    autosize
+                  />
+                );
+              }
 
-                {field.field_type === 'link' && (
-                  <input type="url" value={val} onChange={(e) => handleChange(field.id, e.target.value)} disabled={disabled} placeholder="https://..." />
-                )}
+              if (field.field_type === 'link') {
+                return (
+                  <TextInput
+                    key={field.id}
+                    label={label}
+                    type="url"
+                    placeholder="https://..."
+                    value={val}
+                    onChange={(e) => handleChange(field.id, e.currentTarget.value)}
+                    disabled={disabled}
+                  />
+                );
+              }
 
-                {field.field_type === 'dropdown' && (
-                  <select value={val} onChange={(e) => handleChange(field.id, e.target.value)} disabled={disabled}>
-                    <option value="">-- Select --</option>
-                    {(field.field_options || []).map((opt, i) => (
-                      <option key={i} value={opt}>{opt}</option>
-                    ))}
-                  </select>
-                )}
+              if (field.field_type === 'dropdown') {
+                return (
+                  <Select
+                    key={field.id}
+                    label={label}
+                    placeholder="-- Select --"
+                    value={val || null}
+                    onChange={(v) => handleChange(field.id, v || '')}
+                    data={(field.field_options || []).map((opt) => ({ value: opt, label: opt }))}
+                    disabled={disabled}
+                    clearable
+                  />
+                );
+              }
 
-                {field.field_type === 'checkbox' && (
-                  <div style={{ display: 'flex', gap: '1rem', marginTop: '0.25rem' }}>
-                    <label className="checkbox-label">
-                      <input
-                        type="radio"
-                        name={`checkbox_${field.id}`}
-                        checked={val === 'yes'}
-                        onChange={() => handleChange(field.id, 'yes')}
-                        disabled={disabled}
-                      />
-                      Yes
-                    </label>
-                    <label className="checkbox-label">
-                      <input
-                        type="radio"
-                        name={`checkbox_${field.id}`}
-                        checked={val === 'no'}
-                        onChange={() => handleChange(field.id, 'no')}
-                        disabled={disabled}
-                      />
-                      No
-                    </label>
-                  </div>
-                )}
-              </div>
-            );
-          })}
-        </div>
+              if (field.field_type === 'checkbox') {
+                return (
+                  <Radio.Group
+                    key={field.id}
+                    label={label}
+                    value={val}
+                    onChange={(v) => handleChange(field.id, v)}
+                  >
+                    <Group mt="xs">
+                      <Radio value="yes" label="Yes" disabled={disabled} />
+                      <Radio value="no" label="No" disabled={disabled} />
+                    </Group>
+                  </Radio.Group>
+                );
+              }
+
+              return null;
+            })}
+          </Stack>
+        </Card>
       ))}
-    </div>
+    </Stack>
   );
 }

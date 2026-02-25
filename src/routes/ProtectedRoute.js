@@ -1,25 +1,39 @@
 import React from 'react';
-import { Navigate } from 'react-router-dom';
+import { Navigate, useLocation } from 'react-router-dom';
+import { Center, Loader, Text, Stack } from '@mantine/core';
 import { useAuth } from '../context/AuthContext';
 
 export default function ProtectedRoute({ children, allowedRoles }) {
   const { user, profile, loading } = useAuth();
+  const location = useLocation();
 
   if (loading) {
-    return <div className="loading-screen">Loading...</div>;
+    return (
+      <Center h="100vh">
+        <Stack align="center" gap="md">
+          <Loader size="lg" color="indigo" />
+          <Text c="dimmed">Loading...</Text>
+        </Stack>
+      </Center>
+    );
   }
 
   if (!user) {
-    return <Navigate to="/login" replace />;
+    return <Navigate to="/login" state={{ from: location }} replace />;
   }
 
   if (!profile) {
-    // Profile is still being fetched — show loading instead of redirecting
-    return <div className="loading-screen">Loading profile...</div>;
+    return (
+      <Center h="100vh">
+        <Stack align="center" gap="md">
+          <Loader size="lg" color="indigo" />
+          <Text c="dimmed">Loading profile...</Text>
+        </Stack>
+      </Center>
+    );
   }
 
   if (allowedRoles && !allowedRoles.includes(profile.role)) {
-    // Redirect to their correct dashboard
     const roleRoutes = {
       org_admin: '/org',
       super_admin: '/super',

@@ -1,6 +1,15 @@
 import React from 'react';
+import { Group, Text, Badge, Button, AppShell } from '@mantine/core';
+import { IconLogout } from '@tabler/icons-react';
 import { useAuth } from '../context/AuthContext';
 import { useNavigate } from 'react-router-dom';
+
+const ROLE_LABELS = {
+  org_admin: 'Org Admin',
+  super_admin: 'Super Admin',
+  faculty: 'Faculty',
+  student: 'Student',
+};
 
 export default function Navbar() {
   const { profile, signOut } = useAuth();
@@ -13,23 +22,30 @@ export default function Navbar() {
 
   if (!profile) return null;
 
-  const roleLabels = {
-    org_admin: 'Org Admin',
-    super_admin: 'Super Admin',
-    faculty: 'Faculty',
-    student: 'Student',
-  };
-
   return (
-    <nav className="navbar">
-      <div className="navbar-brand">StoreIt</div>
-      <div className="navbar-info">
-        <span className="navbar-role">{roleLabels[profile.role]}</span>
-        <span className="navbar-email">{profile.username}</span>
-        <button className="btn btn-sm btn-outline" onClick={handleLogout}>
-          Logout
-        </button>
-      </div>
-    </nav>
+    <AppShell.Header>
+      <Group h="100%" px="md" justify="space-between">
+        <Text fw={700} size="lg" c="white">
+          StoreIt
+        </Text>
+        <Group gap="sm">
+          <Badge variant="light" color="white" size="lg">
+            {ROLE_LABELS[profile.role]}
+          </Badge>
+          <Text c="rgba(255,255,255,0.85)" size="sm" visibleFrom="sm">
+            {profile.username}
+          </Text>
+          <Button
+            variant="subtle"
+            color="white"
+            size="xs"
+            leftSection={<IconLogout size={16} />}
+            onClick={handleLogout}
+          >
+            Logout
+          </Button>
+        </Group>
+      </Group>
+    </AppShell.Header>
   );
 }
