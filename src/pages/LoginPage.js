@@ -41,7 +41,7 @@ export default function LoginPage() {
       setError(authError);
       setLoading(false);
     }
-  }, [authError]);
+  }, [authError]); 
 
   // If auth finished loading, user exists but profile is missing, sign out the stale session
   useEffect(() => {
