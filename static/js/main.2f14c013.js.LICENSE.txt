@@ -3,6 +3,13 @@
 /*! xlsx.js (C) 2013-present SheetJS -- http://sheetjs.com */
 
 /**
+ * @license @tabler/icons-react v3.37.1 - MIT
+ *
+ * This source code is licensed under the MIT license.
+ * See the LICENSE file in the root directory of this source tree.
+ */
+
+/**
  * @license React
  * react-dom-client.production.js
  *
