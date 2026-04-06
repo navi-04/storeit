@@ -7,7 +7,7 @@ import {
 import { notifications } from '@mantine/notifications';
 import {
   IconAlertCircle, IconTrash, IconEdit, IconEye, IconEyeOff,
-  IconUpload, IconDownload,
+  IconUpload, IconDownload, IconCopy,
 } from '@tabler/icons-react';
 import { supabase, supabaseAdmin } from '../supabaseClient';
 import { usernameToEmail } from '../utils/authEmail';
@@ -51,8 +51,14 @@ export function SuperAdminDashboard() {
 
   const [studentFieldClassId, setStudentFieldClassId] = useState('');
   const [studentSections, setStudentSections] = useState([]);
+  const [studentCopySourceClassId, setStudentCopySourceClassId] = useState('');
+  const [studentCopySectionId, setStudentCopySectionId] = useState('');
+  const [studentCopySections, setStudentCopySections] = useState([]);
   const [facultyFieldClassId, setFacultyFieldClassId] = useState('');
   const [facultySections, setFacultySections] = useState([]);
+  const [facultyCopySourceClassId, setFacultyCopySourceClassId] = useState('');
+  const [facultyCopySectionId, setFacultyCopySectionId] = useState('');
+  const [facultyCopySections, setFacultyCopySections] = useState([]);
 
   const [classFacultyMap, setClassFacultyMap] = useState({});
   const [classStudentMap, setClassStudentMap] = useState({});
@@ -363,6 +369,226 @@ export function SuperAdminDashboard() {
     } catch (err) { setError(err.message); } finally { setLoading(false); }
   };
 
+  const fetchSectionsWithFields = useCallback(async (classId, sectionTable, fieldTable) => {
+    if (!classId) return [];
+
+    const { data: secData, error: secErr } = await supabase
+      .from(sectionTable)
+      .select('*')
+      .eq('class_id', classId)
+      .order('section_order');
+    if (secErr) throw secErr;
+
+    const sectionIds = (secData || []).map((s) => s.id);
+    let fieldsData = [];
+    if (sectionIds.length > 0) {
+      const { data: fData, error: fErr } = await supabase
+        .from(fieldTable)
+        .select('*')
+        .in('section_id', sectionIds)
+        .order('field_order');
+      if (fErr) throw fErr;
+      fieldsData = fData || [];
+    }
+
+    return (secData || []).map((s) => ({
+      ...s,
+      fields: fieldsData.filter((f) => f.section_id === s.id),
+    }));
+  }, []);
+
+  useEffect(() => {
+    const loadStudentCopySections = async () => {
+      if (!studentCopySourceClassId) {
+        setStudentCopySections([]);
+        setStudentCopySectionId('');
+        return;
+      }
+
+      try {
+        const sections = await fetchSectionsWithFields(
+          studentCopySourceClassId,
+          'student_sections',
+          'student_section_fields'
+        );
+        setStudentCopySections(sections);
+        setStudentCopySectionId((prev) => (sections.some((s) => s.id === prev) ? prev : ''));
+      } catch (err) {
+        setError(err.message);
+        setStudentCopySections([]);
+      }
+    };
+
+    loadStudentCopySections();
+  }, [studentCopySourceClassId, fetchSectionsWithFields]);
+
+  useEffect(() => {
+    const loadFacultyCopySections = async () => {
+      if (!facultyCopySourceClassId) {
+        setFacultyCopySections([]);
+        setFacultyCopySectionId('');
+        return;
+      }
+
+      try {
+        const sections = await fetchSectionsWithFields(
+          facultyCopySourceClassId,
+          'faculty_sections',
+          'faculty_section_fields'
+        );
+        setFacultyCopySections(sections);
+        setFacultyCopySectionId((prev) => (sections.some((s) => s.id === prev) ? prev : ''));
+      } catch (err) {
+        setError(err.message);
+        setFacultyCopySections([]);
+      }
+    };
+
+    loadFacultyCopySections();
+  }, [facultyCopySourceClassId, fetchSectionsWithFields]);
+
+  const copySectionsAcrossClasses = async ({
+    sourceClassId,
+    targetClassId,
+    sourceSectionId,
+    sectionTable,
+    fieldTable,
+    copyAll,
+    label,
+  }) => {
+    if (!sourceClassId || !targetClassId) return false;
+    if (!profile?.id) {
+      setError('Could not identify current admin user. Please refresh and try again.');
+      return false;
+    }
+    if (sourceClassId === targetClassId) {
+      setError('Source class and target class must be different.');
+      return false;
+    }
+
+    clearMsg();
+    setLoading(true);
+
+    try {
+      const sourceSections = await fetchSectionsWithFields(sourceClassId, sectionTable, fieldTable);
+      const sectionsToCopy = copyAll
+        ? sourceSections
+        : sourceSections.filter((s) => s.id === sourceSectionId);
+
+      if (sectionsToCopy.length === 0) {
+        notifications.show({ message: `No ${label.toLowerCase()} sections found to copy.`, color: 'yellow' });
+        return false;
+      }
+
+      const { count, error: countErr } = await supabase
+        .from(sectionTable)
+        .select('id', { count: 'exact', head: true })
+        .eq('class_id', targetClassId);
+      if (countErr) throw countErr;
+
+      const startOrder = count || 0;
+      let copiedCount = 0;
+
+      for (let i = 0; i < sectionsToCopy.length; i++) {
+        const sourceSection = sectionsToCopy[i];
+        const { data: insertedSection, error: secInsertErr } = await supabase
+          .from(sectionTable)
+          .insert({
+            class_id: targetClassId,
+            section_name: sourceSection.section_name,
+            section_order: startOrder + i,
+            created_by: profile.id,
+          })
+          .select()
+          .single();
+        if (secInsertErr) throw secInsertErr;
+
+        const sectionFields = [...(sourceSection.fields || [])].sort((a, b) => (a.field_order || 0) - (b.field_order || 0));
+        if (sectionFields.length > 0) {
+          const payload = sectionFields.map((f, idx) => ({
+            section_id: insertedSection.id,
+            field_name: f.field_name,
+            field_type: f.field_type,
+            field_options: f.field_options || [],
+            field_order: idx,
+            required: f.required || false,
+            upload_link: f.upload_link || '',
+          }));
+
+          const { error: fieldInsertErr } = await supabase.from(fieldTable).insert(payload);
+          if (fieldInsertErr) throw fieldInsertErr;
+        }
+
+        copiedCount += 1;
+      }
+
+      notifications.show({
+        message: `Copied ${copiedCount} ${label.toLowerCase()} section${copiedCount > 1 ? 's' : ''}.`,
+        color: 'green',
+      });
+      return true;
+    } catch (err) {
+      setError(err.message);
+      return false;
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const copyStudentSectionFromClass = async () => {
+    if (!studentFieldClassId || !studentCopySourceClassId || !studentCopySectionId) return;
+    const copied = await copySectionsAcrossClasses({
+      sourceClassId: studentCopySourceClassId,
+      targetClassId: studentFieldClassId,
+      sourceSectionId: studentCopySectionId,
+      sectionTable: 'student_sections',
+      fieldTable: 'student_section_fields',
+      copyAll: false,
+      label: 'Student',
+    });
+    if (copied) await fetchStudentSections();
+  };
+
+  const copyStudentFormFromClass = async () => {
+    if (!studentFieldClassId || !studentCopySourceClassId) return;
+    const copied = await copySectionsAcrossClasses({
+      sourceClassId: studentCopySourceClassId,
+      targetClassId: studentFieldClassId,
+      sectionTable: 'student_sections',
+      fieldTable: 'student_section_fields',
+      copyAll: true,
+      label: 'Student',
+    });
+    if (copied) await fetchStudentSections();
+  };
+
+  const copyFacultySectionFromClass = async () => {
+    if (!facultyFieldClassId || !facultyCopySourceClassId || !facultyCopySectionId) return;
+    const copied = await copySectionsAcrossClasses({
+      sourceClassId: facultyCopySourceClassId,
+      targetClassId: facultyFieldClassId,
+      sourceSectionId: facultyCopySectionId,
+      sectionTable: 'faculty_sections',
+      fieldTable: 'faculty_section_fields',
+      copyAll: false,
+      label: 'Faculty',
+    });
+    if (copied) await fetchFacultySections();
+  };
+
+  const copyFacultyFormFromClass = async () => {
+    if (!facultyFieldClassId || !facultyCopySourceClassId) return;
+    const copied = await copySectionsAcrossClasses({
+      sourceClassId: facultyCopySourceClassId,
+      targetClassId: facultyFieldClassId,
+      sectionTable: 'faculty_sections',
+      fieldTable: 'faculty_section_fields',
+      copyAll: true,
+      label: 'Faculty',
+    });
+    if (copied) await fetchFacultySections();
+  };
+
   // ======================== VIEW DATA ========================
   const fetchViewData = useCallback(async () => {
     if (!viewClassId) {
@@ -513,6 +739,16 @@ export function SuperAdminDashboard() {
   };
 
   const classSelectData = classes.map((c) => ({ value: c.id, label: c.name }));
+  const studentCopyClassOptions = classes
+    .filter((c) => c.id !== studentFieldClassId)
+    .map((c) => ({ value: c.id, label: c.name }));
+  const studentCopySectionOptions = studentCopySections
+    .map((s) => ({ value: s.id, label: `${s.section_name} (${(s.fields || []).length} fields)` }));
+  const facultyCopyClassOptions = classes
+    .filter((c) => c.id !== facultyFieldClassId)
+    .map((c) => ({ value: c.id, label: c.name }));
+  const facultyCopySectionOptions = facultyCopySections
+    .map((s) => ({ value: s.id, label: `${s.section_name} (${(s.fields || []).length} fields)` }));
   const allViewStudentFields = viewStudentData.sections.flatMap((s) => s.fields);
   const allViewFacultyFields = viewFacultyData.sections.flatMap((s) => s.fields);
 
@@ -766,9 +1002,78 @@ export function SuperAdminDashboard() {
               <Card withBorder padding="lg">
                 <Title order={4} mb="sm">Manage Student Sections</Title>
                 <Text c="dimmed" size="sm" mb="md">Create sections with fields that students must fill out.</Text>
-                <Select label="Select Class" placeholder="-- Select Class --" data={classSelectData} value={studentFieldClassId || null} onChange={(v) => { setStudentFieldClassId(v || ''); clearMsg(); }} mb="md" />
+                <Select
+                  label="Select Class"
+                  placeholder="-- Select Class --"
+                  data={classSelectData}
+                  value={studentFieldClassId || null}
+                  onChange={(v) => {
+                    const nextClassId = v || '';
+                    setStudentFieldClassId(nextClassId);
+                    if (studentCopySourceClassId === nextClassId) {
+                      setStudentCopySourceClassId('');
+                      setStudentCopySectionId('');
+                      setStudentCopySections([]);
+                    }
+                    clearMsg();
+                  }}
+                  mb="md"
+                />
                 {studentFieldClassId && (
-                  <FormBuilder sections={studentSections} onSaveSection={saveStudentSection} onDeleteSection={deleteStudentSection} onDeleteField={deleteStudentSectionField} onAddField={addStudentFieldToSection} loading={loading} />
+                  <>
+                    <Card withBorder padding="md" mb="md" bg="gray.0">
+                      <Title order={6} mb="xs">Copy Student Form Setup</Title>
+                      <Text c="dimmed" size="sm" mb="sm">
+                        Copy one section or the full student form from another class.
+                      </Text>
+                      <Group grow align="end">
+                        <Select
+                          label="Source Class"
+                          placeholder="-- Select Source Class --"
+                          data={studentCopyClassOptions}
+                          value={studentCopySourceClassId || null}
+                          onChange={(v) => {
+                            setStudentCopySourceClassId(v || '');
+                            setStudentCopySectionId('');
+                            clearMsg();
+                          }}
+                          disabled={studentCopyClassOptions.length === 0}
+                        />
+                        <Select
+                          label="Source Section"
+                          placeholder="-- Select Section --"
+                          data={studentCopySectionOptions}
+                          value={studentCopySectionId || null}
+                          onChange={(v) => setStudentCopySectionId(v || '')}
+                          disabled={!studentCopySourceClassId || studentCopySectionOptions.length === 0}
+                        />
+                      </Group>
+                      <Group mt="sm">
+                        <Button
+                          size="xs"
+                          variant="light"
+                          leftSection={<IconCopy size={14} />}
+                          onClick={copyStudentSectionFromClass}
+                          disabled={loading || !studentCopySourceClassId || !studentCopySectionId}
+                        >
+                          Copy Selected Section
+                        </Button>
+                        <Button
+                          size="xs"
+                          leftSection={<IconCopy size={14} />}
+                          onClick={copyStudentFormFromClass}
+                          disabled={loading || !studentCopySourceClassId}
+                        >
+                          Copy Full Form
+                        </Button>
+                      </Group>
+                      {studentCopyClassOptions.length === 0 && (
+                        <Text c="dimmed" size="xs" mt="sm">Create at least one more class to use copy options.</Text>
+                      )}
+                    </Card>
+
+                    <FormBuilder sections={studentSections} onSaveSection={saveStudentSection} onDeleteSection={deleteStudentSection} onDeleteField={deleteStudentSectionField} onAddField={addStudentFieldToSection} loading={loading} />
+                  </>
                 )}
               </Card>
             </Tabs.Panel>
@@ -778,9 +1083,78 @@ export function SuperAdminDashboard() {
               <Card withBorder padding="lg">
                 <Title order={4} mb="sm">Manage Faculty Sections</Title>
                 <Text c="dimmed" size="sm" mb="md">Create sections with fields that faculty must fill out.</Text>
-                <Select label="Select Class" placeholder="-- Select Class --" data={classSelectData} value={facultyFieldClassId || null} onChange={(v) => { setFacultyFieldClassId(v || ''); clearMsg(); }} mb="md" />
+                <Select
+                  label="Select Class"
+                  placeholder="-- Select Class --"
+                  data={classSelectData}
+                  value={facultyFieldClassId || null}
+                  onChange={(v) => {
+                    const nextClassId = v || '';
+                    setFacultyFieldClassId(nextClassId);
+                    if (facultyCopySourceClassId === nextClassId) {
+                      setFacultyCopySourceClassId('');
+                      setFacultyCopySectionId('');
+                      setFacultyCopySections([]);
+                    }
+                    clearMsg();
+                  }}
+                  mb="md"
+                />
                 {facultyFieldClassId && (
-                  <FormBuilder sections={facultySections} onSaveSection={saveFacultySection} onDeleteSection={deleteFacultySection} onDeleteField={deleteFacultySectionField} onAddField={addFacultyFieldToSection} loading={loading} />
+                  <>
+                    <Card withBorder padding="md" mb="md" bg="gray.0">
+                      <Title order={6} mb="xs">Copy Faculty Form Setup</Title>
+                      <Text c="dimmed" size="sm" mb="sm">
+                        Copy one section or the full faculty form from another class.
+                      </Text>
+                      <Group grow align="end">
+                        <Select
+                          label="Source Class"
+                          placeholder="-- Select Source Class --"
+                          data={facultyCopyClassOptions}
+                          value={facultyCopySourceClassId || null}
+                          onChange={(v) => {
+                            setFacultyCopySourceClassId(v || '');
+                            setFacultyCopySectionId('');
+                            clearMsg();
+                          }}
+                          disabled={facultyCopyClassOptions.length === 0}
+                        />
+                        <Select
+                          label="Source Section"
+                          placeholder="-- Select Section --"
+                          data={facultyCopySectionOptions}
+                          value={facultyCopySectionId || null}
+                          onChange={(v) => setFacultyCopySectionId(v || '')}
+                          disabled={!facultyCopySourceClassId || facultyCopySectionOptions.length === 0}
+                        />
+                      </Group>
+                      <Group mt="sm">
+                        <Button
+                          size="xs"
+                          variant="light"
+                          leftSection={<IconCopy size={14} />}
+                          onClick={copyFacultySectionFromClass}
+                          disabled={loading || !facultyCopySourceClassId || !facultyCopySectionId}
+                        >
+                          Copy Selected Section
+                        </Button>
+                        <Button
+                          size="xs"
+                          leftSection={<IconCopy size={14} />}
+                          onClick={copyFacultyFormFromClass}
+                          disabled={loading || !facultyCopySourceClassId}
+                        >
+                          Copy Full Form
+                        </Button>
+                      </Group>
+                      {facultyCopyClassOptions.length === 0 && (
+                        <Text c="dimmed" size="xs" mt="sm">Create at least one more class to use copy options.</Text>
+                      )}
+                    </Card>
+
+                    <FormBuilder sections={facultySections} onSaveSection={saveFacultySection} onDeleteSection={deleteFacultySection} onDeleteField={deleteFacultySectionField} onAddField={addFacultyFieldToSection} loading={loading} />
+                  </>
                 )}
               </Card>
             </Tabs.Panel>
