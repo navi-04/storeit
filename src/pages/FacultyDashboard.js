@@ -4,7 +4,8 @@ import {
   Stack, Table, Tabs, Loader, Center, Alert,
 } from '@mantine/core';
 import { notifications } from '@mantine/notifications';
-import { IconAlertCircle, IconRefresh, IconDeviceFloppy } from '@tabler/icons-react';
+import { IconAlertCircle, IconRefresh, IconDeviceFloppy, IconDownload } from '@tabler/icons-react';
+import * as XLSX from 'xlsx';
 import { supabase } from '../supabaseClient';
 import { useAuth } from '../context/AuthContext';
 import Navbar from '../components/Navbar';
@@ -131,6 +132,23 @@ export function FacultyDashboard() {
   const classSelectData = myClasses.map((c) => ({ value: c.id, label: c.name }));
   const allStudentFields = useMemo(() => studentSections.flatMap((s) => s.fields), [studentSections]);
 
+  const exportStudentData = () => {
+    if (allStudentFields.length === 0 || classStudents.length === 0) return;
+    const rows = classStudents.map((student) => {
+      const row = { 'Full Name': student.full_name, Username: student.username };
+      allStudentFields.forEach((field) => {
+        row[field.field_name] = studentSubmissions[student.id]?.[field.id] || '';
+      });
+      return row;
+    });
+
+    const ws = XLSX.utils.json_to_sheet(rows);
+    const wb = XLSX.utils.book_new();
+    const selectedClass = myClasses.find((c) => c.id === selectedClassId);
+    XLSX.utils.book_append_sheet(wb, ws, 'Student Submissions');
+    XLSX.writeFile(wb, `student_submissions_${selectedClass?.name || 'class'}.xlsx`);
+  };
+
   return (
     <AppShell header={{ height: 60 }} padding="md">
       <AppShell.Header bg="indigo.6"><Navbar /></AppShell.Header>
@@ -182,7 +200,12 @@ export function FacultyDashboard() {
 
               <Tabs.Panel value="view-students" pt="md">
                 <Card withBorder padding="lg">
-                  <Title order={4} mb="sm">Student Submissions</Title>
+                  <Group justify="space-between" mb="sm">
+                    <Title order={4}>Student Submissions</Title>
+                    {allStudentFields.length > 0 && classStudents.length > 0 && (
+                      <Button size="xs" variant="light" onClick={exportStudentData} leftSection={<IconDownload size={14} />}>Export</Button>
+                    )}
+                  </Group>
                   {classStudents.length === 0 ? (
                     <Text c="dimmed">No students in this class.</Text>
                   ) : allStudentFields.length === 0 ? (

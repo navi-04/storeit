@@ -19,12 +19,12 @@ import {
  * Props:
  *   sections  — array of { id, section_name, fields: [...] }
  *   values    — { [field_id]: value }
- *   onChange  — (newValues) => void
+ *   onChange  — (fieldId, value) => void
  *   disabled  — boolean
  */
 export default function FieldRenderer({ sections, values, onChange, disabled }) {
   const handleChange = (fieldId, val) => {
-    onChange({ ...values, [fieldId]: val });
+    onChange(fieldId, val);
   };
 
   if (!sections || sections.length === 0) {
