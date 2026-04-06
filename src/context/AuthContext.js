@@ -10,6 +10,7 @@ const PROFILE_FETCH_TIMEOUT_MS = 15000;
 const PROFILE_POLICY_RECURSION_CODE = '42P17';
 const PROFILE_POLICY_RECURSION_MESSAGE =
   'Your Supabase RLS policies are causing recursive reads (42P17). Fix the policy on class_students/profiles and try again.';
+const PROFILE_FETCH_TIMEOUT_RESULT = '__PROFILE_FETCH_TIMEOUT__';
 
 export function AuthProvider({ children }) {
   const [user, setUser] = useState(null);
@@ -64,7 +65,7 @@ export function AuthProvider({ children }) {
       if (result === timeoutSentinel) {
         console.warn('Profile fetch timed out; continuing without profile data.');
         setAuthError('Profile lookup timed out. Please verify Supabase network/policy configuration.');
-        return null;
+        return PROFILE_FETCH_TIMEOUT_RESULT;
       }
 
       return result;
@@ -105,7 +106,13 @@ export function AuthProvider({ children }) {
 
         if (session?.user) {
           const p = await fetchProfileWithTimeout(session.user);
-          safeSetAuthState(session.user, p);
+          if (p === PROFILE_FETCH_TIMEOUT_RESULT) {
+            if (isMounted) {
+              setUser(session.user);
+            }
+          } else {
+            safeSetAuthState(session.user, p);
+          }
         } else {
           setAuthError('');
           safeSetAuthState(null, null);
@@ -133,7 +140,9 @@ export function AuthProvider({ children }) {
           const p = await fetchProfileWithTimeout(session.user);
           if (isMounted) {
             setUser(session.user);
-            setProfile(p);
+            if (p !== PROFILE_FETCH_TIMEOUT_RESULT) {
+              setProfile(p);
+            }
           }
         } else {
           setAuthError('');

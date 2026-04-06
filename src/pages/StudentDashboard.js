@@ -1,7 +1,7 @@
 import React, { useEffect, useState, useCallback } from 'react';
 import {
   AppShell, Container, Title, Card, Text, Button, Group,
-  Stack, Loader, Center, Alert, Badge,
+  Stack, Loader, Center, Alert, Badge, Select,
 } from '@mantine/core';
 import { notifications } from '@mantine/notifications';
 import { IconAlertCircle, IconRefresh, IconDeviceFloppy } from '@tabler/icons-react';
@@ -15,7 +15,8 @@ export function StudentDashboard() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
 
-  const [myClass, setMyClass] = useState(null);
+  const [myClasses, setMyClasses] = useState([]);
+  const [selectedClassId, setSelectedClassId] = useState('');
   const [studentSections, setStudentSections] = useState([]);
   const [fieldValues, setFieldValues] = useState({});
 
@@ -23,20 +24,34 @@ export function StudentDashboard() {
     if (!user?.id) return;
     setLoading(true);
     try {
-      // Find class
+      // Find all classes assigned to this student
       const { data: csData } = await supabase
         .from('class_students')
         .select('class_id, classes(id, name)')
-        .eq('student_id', user.id)
-        .limit(1);
-      const cs = csData?.[0];
-      if (!cs?.classes) { setMyClass(null); setStudentSections([]); setFieldValues({}); setLoading(false); return; }
-      setMyClass(cs.classes);
-      const classId = cs.classes.id;
+        .eq('student_id', user.id);
+
+      const classes = (csData || []).map((cs) => cs.classes).filter(Boolean);
+      setMyClasses(classes);
+
+      if (classes.length === 0) {
+        setSelectedClassId('');
+        setStudentSections([]);
+        setFieldValues({});
+        setLoading(false);
+        return;
+      }
+
+      const activeClassId = selectedClassId && classes.some((c) => c.id === selectedClassId)
+        ? selectedClassId
+        : classes[0].id;
+
+      if (activeClassId !== selectedClassId) {
+        setSelectedClassId(activeClassId);
+      }
 
       // Fetch sections + fields
       const { data: secData } = await supabase
-        .from('student_sections').select('*').eq('class_id', classId).order('section_order');
+        .from('student_sections').select('*').eq('class_id', activeClassId).order('section_order');
       const secs = secData || [];
       let fields = [];
       if (secs.length > 0) {
@@ -60,7 +75,7 @@ export function StudentDashboard() {
       }
     } catch (err) { setError(err.message); }
     finally { setLoading(false); }
-  }, [user?.id]);
+  }, [user?.id, selectedClassId]);
 
   useEffect(() => { fetchAllData(); }, [fetchAllData]);
 
@@ -104,20 +119,41 @@ export function StudentDashboard() {
 
           {loading ? (
             <Center py="xl"><Loader /></Center>
-          ) : !myClass ? (
+          ) : myClasses.length === 0 ? (
             <Card withBorder padding="lg">
               <Text c="dimmed">You haven't been assigned to any class yet. Ask your Super Admin to add you.</Text>
             </Card>
           ) : (
             <>
               <Card withBorder padding="lg" mb="lg">
-                <Group>
-                  <Text fw={500}>Class:</Text>
-                  <Badge size="lg" variant="light" color="indigo">{myClass.name}</Badge>
-                </Group>
+                <Stack gap="sm">
+                  <Group>
+                    <Text fw={500}>Your Classes ({myClasses.length}):</Text>
+                  </Group>
+                  <Group gap="xs" wrap="wrap">
+                    {myClasses.map((c) => (
+                      <Badge
+                        key={c.id}
+                        size="lg"
+                        variant={c.id === selectedClassId ? 'filled' : 'light'}
+                        color={c.id === selectedClassId ? 'indigo' : 'gray'}
+                      >
+                        {c.name}
+                      </Badge>
+                    ))}
+                  </Group>
+                  <Select
+                    label="Select Class Form"
+                    placeholder="Choose class"
+                    data={myClasses.map((c) => ({ value: c.id, label: c.name }))}
+                    value={selectedClassId || null}
+                    onChange={(v) => setSelectedClassId(v || '')}
+                    allowDeselect={false}
+                  />
+                </Stack>
               </Card>
 
-              {studentSections.length === 0 ? (
+              {selectedClassId && studentSections.length === 0 ? (
                 <Card withBorder padding="lg"><Text c="dimmed">No sections/fields assigned for your class yet.</Text></Card>
               ) : (
                 <Card withBorder padding="lg">
